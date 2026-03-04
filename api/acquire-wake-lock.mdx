@@ -34,12 +34,12 @@ function acquireWakeLock(
 
 | Platform | Behavior |
 |----------|----------|
-| **Android** | Acquires a `PARTIAL_WAKE_LOCK` that keeps the CPU running. Wake locks are reference-counted - you must call `releaseWakeLock()` for each `acquireWakeLock()` call. |
+| **Android** | Acquires a `PARTIAL_WAKE_LOCK` that keeps the CPU running. The library manages a single wake lock - if a wake lock is already held, subsequent calls return `true` without acquiring another lock. |
 | **iOS** | No-op that returns `true` immediately. iOS handles background execution differently through Background Modes. |
 
 ## Important Notes
 
-- **Reference Counting**: Wake locks are reference-counted on Android. Always call [`releaseWakeLock()`](/api/release-wake-lock) when your background work is complete.
+- **Single Wake Lock Model**: The library maintains a single wake lock instance. If you call `acquireWakeLock()` while a lock is already held, it returns `true` without creating a duplicate. Always call [`releaseWakeLock()`](/api/release-wake-lock) when your background work is complete.
 - **Battery Impact**: Holding wake locks prevents the device from sleeping, which can drain battery. Use timeouts and release locks promptly.
 - **Permission Required**: Requires `android.permission.WAKE_LOCK` in AndroidManifest.xml (automatically added by the library).
 

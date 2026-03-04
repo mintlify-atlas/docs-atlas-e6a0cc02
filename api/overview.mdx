@@ -42,6 +42,34 @@ const isHeld: boolean = await isWakeLockHeld();
 const manufacturer: string | null = await getDeviceManufacturer();
 ```
 
+### Exported Interfaces
+
+The library exports several TypeScript interfaces for type-safe development:
+
+```typescript
+// Main API interface
+interface BackgroundGuardianInterface {
+  acquireWakeLock: (tag?: string, timeout?: number) => Promise<boolean>;
+  releaseWakeLock: () => Promise<boolean>;
+  isWakeLockHeld: () => Promise<boolean>;
+  // ... all other methods
+}
+
+// Device information
+interface DeviceInfo {
+  manufacturer: string | null;
+}
+
+// Additional utility types (for internal use)
+interface WakeLockResult {
+  success: boolean;
+}
+
+interface BatteryOptimizationStatus {
+  isIgnoring: boolean;
+}
+```
+
 ## API Categories
 
 ### Wake Lock Management
