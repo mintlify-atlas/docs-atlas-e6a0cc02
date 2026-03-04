@@ -1,0 +1,765 @@
+---
+title: Wake locks
+description: Keep the CPU running during background tasks using partial and screen wake locks with proper reference counting
+---
+
+Wake locks are Android power management tools that prevent the system from entering sleep states. React Native Background Guardian provides two types of wake locks: **partial wake locks** for background CPU execution and **screen wake locks** for keeping the display on.
+
+## Understanding wake locks
+
+Android devices aggressively conserve power by entering sleep states when idle. Wake locks allow apps to signal that they need the device to stay awake:
+
+- **Partial wake lock**: Keeps the CPU running but allows the screen to turn off
+- **Screen wake lock**: Keeps the screen on while the app is in the foreground
+
+<Warning>
+Wake locks consume significant battery power. Always release them when your task is complete, and use appropriate timeouts to prevent battery drain if your app crashes.
+</Warning>
+
+## Partial wake locks
+
+Partial wake locks keep the CPU running while allowing the screen, keyboard backlight, and other components to turn off. This is essential for background processing.
+
+### When to use partial wake locks
+
+Use partial wake locks for:
+
+- **Background audio playback** - Music or podcast players
+- **Long-running downloads** - File downloads or sync operations
+- **Location tracking** - Continuous GPS tracking
+- **Real-time data processing** - Sensor data collection and processing
+- **Network operations** - WebSocket connections or continuous polling
+
+### Acquiring a partial wake lock
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+
+// Acquire a wake lock with a custom tag and 10-minute timeout
+const acquired = await BackgroundGuardian.acquireWakeLock(
+  'MyBackgroundTask',
+  10 * 60 * 1000 // 10 minutes in milliseconds
+);
+
+if (acquired) {
+  console.log('Wake lock acquired successfully');
+  // Perform your background work
+  await doBackgroundWork();
+  // Always release when done
+  await BackgroundGuardian.releaseWakeLock();
+} else {
+  console.error('Failed to acquire wake lock');
+}
+```
+
+### Parameters explained
+
+#### Tag parameter
+
+The `tag` parameter is an optional identifier for debugging:
+
+```typescript
+// Default tag
+await BackgroundGuardian.acquireWakeLock(); // Uses "BackgroundGuardian"
+
+// Custom tag for debugging
+await BackgroundGuardian.acquireWakeLock('AudioPlayback');
+await BackgroundGuardian.acquireWakeLock('LocationTracking');
+await BackgroundGuardian.acquireWakeLock('DataSync');
+```
+
+The tag appears in system logs and ADB output, making it easier to identify which component is holding the wake lock.
+
+<Info>
+Internally, the library creates wake lock tags in the format `BackgroundGuardian:WakeLock:YourTag`. From BackgroundGuardianModule.kt:77:
+
+```kotlin
+val wakeLockTag = if (tag.isNotEmpty()) "$WAKE_LOCK_TAG:$tag" else WAKE_LOCK_TAG
+```
+</Info>
+
+#### Timeout parameter
+
+The `timeout` parameter sets an automatic release time in milliseconds:
+
+```typescript
+// Default timeout: 24 hours (86,400,000 ms)
+await BackgroundGuardian.acquireWakeLock('Task');
+
+// Custom timeout: 5 minutes
+await BackgroundGuardian.acquireWakeLock('QuickSync', 5 * 60 * 1000);
+
+// Custom timeout: 1 hour
+await BackgroundGuardian.acquireWakeLock('LongTask', 60 * 60 * 1000);
+```
+
+<Warning>
+**Always set an appropriate timeout!** If your app crashes while holding a wake lock without a timeout, the CPU will remain active indefinitely, draining the battery. The default 24-hour timeout prevents this, but shorter timeouts are better for battery life.
+</Warning>
+
+### How it works internally
+
+On Android, partial wake locks are implemented using `PowerManager.WakeLock` with the `PARTIAL_WAKE_LOCK` flag:
+
+```kotlin
+// From BackgroundGuardianModule.kt:75-84
+val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+val wakeLockTag = if (tag.isNotEmpty()) "$WAKE_LOCK_TAG:$tag" else WAKE_LOCK_TAG
+
+wakeLock = powerManager.newWakeLock(
+  PowerManager.PARTIAL_WAKE_LOCK,
+  wakeLockTag
+).apply {
+  acquire(timeout.toLong())
+}
+```
+
+On iOS, `acquireWakeLock()` is a no-op that returns `true` immediately, as iOS handles background execution differently through Background Modes configured in Xcode.
+
+### Releasing wake locks
+
+Always release wake locks when your background work is complete:
+
+```typescript
+const released = await BackgroundGuardian.releaseWakeLock();
+
+if (released) {
+  console.log('Wake lock released successfully');
+} else {
+  console.log('No wake lock was held or release failed');
+}
+```
+
+The implementation safely handles cases where no wake lock was acquired:
+
+```kotlin
+// From BackgroundGuardianModule.kt:105-132
+override fun releaseWakeLock(promise: Promise) {
+  try {
+    val currentWakeLock = wakeLock
+    if (currentWakeLock == null) {
+      Log.d(TAG, "No wake lock to release")
+      promise.resolve(true)
+      return
+    }
+
+    if (!currentWakeLock.isHeld) {
+      Log.d(TAG, "Wake lock already released")
+      wakeLock = null
+      promise.resolve(true)
+      return
+    }
+
+    currentWakeLock.release()
+    wakeLock = null
+    Log.d(TAG, "Wake lock released successfully")
+    promise.resolve(true)
+  } catch (e: Exception) {
+    Log.e(TAG, "Failed to release wake lock", e)
+    wakeLock = null
+    promise.resolve(false)
+  }
+}
+```
+
+### Checking wake lock status
+
+You can check if a wake lock is currently held:
+
+```typescript
+const isHeld = await BackgroundGuardian.isWakeLockHeld();
+
+if (isHeld) {
+  console.log('Wake lock is currently active');
+} else {
+  console.log('No wake lock is held');
+}
+```
+
+This is useful for updating UI state or debugging:
+
+```typescript
+useEffect(() => {
+  const checkStatus = async () => {
+    const isHeld = await BackgroundGuardian.isWakeLockHeld();
+    setWakeLockActive(isHeld);
+  };
+
+  const interval = setInterval(checkStatus, 1000);
+  return () => clearInterval(interval);
+}, []);
+```
+
+<Info>
+On Android, `isWakeLockHeld()` checks the actual wake lock state. On iOS, it always returns `false` as wake locks don't exist on that platform.
+</Info>
+
+## Reference counting behavior
+
+The library uses a **single-instance** wake lock model, not reference counting:
+
+```typescript
+// First acquisition succeeds
+await BackgroundGuardian.acquireWakeLock('Task1'); // ✅ Acquires lock
+
+// Second acquisition is a no-op
+await BackgroundGuardian.acquireWakeLock('Task2'); // ⚠️ Returns true but doesn't acquire a second lock
+
+// Single release affects both
+await BackgroundGuardian.releaseWakeLock(); // ✅ Releases the only lock
+```
+
+From the implementation:
+
+```kotlin
+// From BackgroundGuardianModule.kt:57-65
+override fun acquireWakeLock(tag: String, timeout: Double, promise: Promise) {
+  try {
+    // If we already have an active wake lock, return true without acquiring another
+    wakeLock?.let {
+      if (it.isHeld) {
+        Log.d(TAG, "Wake lock already held, skipping acquisition")
+        promise.resolve(true)
+        return
+      }
+    }
+    // ... acquire new lock
+  }
+}
+```
+
+<Warning>
+**Important implication**: If you need multiple concurrent wake locks for different components, you'll need to implement your own reference counting:
+
+```typescript
+class WakeLockManager {
+  private refCount = 0;
+
+  async acquire(tag: string) {
+    if (this.refCount === 0) {
+      await BackgroundGuardian.acquireWakeLock(tag);
+    }
+    this.refCount++;
+  }
+
+  async release() {
+    this.refCount--;
+    if (this.refCount === 0) {
+      await BackgroundGuardian.releaseWakeLock();
+    }
+  }
+}
+```
+</Warning>
+
+## Screen wake locks
+
+Screen wake locks keep the display on while the app is in the foreground. This is different from partial wake locks and does **not** keep the CPU running in the background.
+
+### When to use screen wake locks
+
+Use screen wake locks for:
+
+- **Video playback** - Prevent screen timeout during videos
+- **Recipe apps** - Keep screen on while cooking
+- **Navigation apps** - Display always visible during directions
+- **Kiosk mode** - Public display terminals
+- **Presentation mode** - Slides or dashboards
+- **Reading apps** - Prevent screen timeout while reading
+
+### Enabling screen wake lock
+
+```typescript
+const enabled = await BackgroundGuardian.enableScreenWakeLock();
+
+if (enabled) {
+  console.log('Screen will stay on');
+}
+```
+
+### Disabling screen wake lock
+
+Always disable the screen wake lock when the user is done:
+
+```typescript
+await BackgroundGuardian.disableScreenWakeLock();
+console.log('Screen can turn off normally');
+```
+
+### Platform-specific behavior
+
+#### Android
+
+On Android, screen wake locks use `FLAG_KEEP_SCREEN_ON`:
+
+```kotlin
+// From BackgroundGuardianModule.kt:162-179
+override fun enableScreenWakeLock(promise: Promise) {
+  val activity = currentActivity
+  if (activity == null) {
+    Log.w(TAG, "No current activity to enable screen wake lock")
+    promise.resolve(false)
+    return
+  }
+
+  UiThreadUtil.runOnUiThread {
+    try {
+      activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+      Log.d(TAG, "Screen wake lock enabled")
+      promise.resolve(true)
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to enable screen wake lock", e)
+      promise.resolve(false)
+    }
+  }
+}
+```
+
+This flag only affects the current Activity and is automatically cleared when the Activity is destroyed.
+
+#### iOS
+
+On iOS, screen wake locks disable the idle timer:
+
+```swift
+// Conceptual iOS implementation
+UIApplication.shared.isIdleTimerDisabled = true
+```
+
+<Note>
+Screen wake locks only work while the app is in the foreground. They do **not** replace partial wake locks for background CPU execution. Use `acquireWakeLock()` for background tasks.
+</Note>
+
+## Complete usage examples
+
+### Background audio player
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+import { Audio } from 'expo-av';
+
+class AudioPlayer {
+  private sound: Audio.Sound | null = null;
+  private isPlaying = false;
+
+  async play(uri: string) {
+    // Acquire wake lock before starting playback
+    const acquired = await BackgroundGuardian.acquireWakeLock(
+      'AudioPlayback',
+      2 * 60 * 60 * 1000 // 2 hours
+    );
+
+    if (!acquired) {
+      console.error('Failed to acquire wake lock');
+      return;
+    }
+
+    try {
+      const { sound } = await Audio.Sound.createAsync({ uri });
+      this.sound = sound;
+      await sound.playAsync();
+      this.isPlaying = true;
+    } catch (error) {
+      console.error('Playback error:', error);
+      // Release wake lock on error
+      await BackgroundGuardian.releaseWakeLock();
+    }
+  }
+
+  async stop() {
+    if (this.sound) {
+      await this.sound.stopAsync();
+      await this.sound.unloadAsync();
+      this.sound = null;
+    }
+
+    this.isPlaying = false;
+
+    // Release wake lock when playback stops
+    await BackgroundGuardian.releaseWakeLock();
+  }
+
+  async pause() {
+    if (this.sound) {
+      await this.sound.pauseAsync();
+      this.isPlaying = false;
+    }
+
+    // Release wake lock when paused
+    await BackgroundGuardian.releaseWakeLock();
+  }
+
+  async resume() {
+    if (this.sound) {
+      // Reacquire wake lock before resuming
+      await BackgroundGuardian.acquireWakeLock('AudioPlayback', 2 * 60 * 60 * 1000);
+      await this.sound.playAsync();
+      this.isPlaying = true;
+    }
+  }
+}
+```
+
+### Video player with screen wake lock
+
+```typescript
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
+import Video from 'react-native-video';
+import BackgroundGuardian from 'react-native-background-guardian';
+
+export function VideoPlayer({ source }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    // Enable screen wake lock when component mounts
+    BackgroundGuardian.enableScreenWakeLock();
+
+    // Disable when component unmounts
+    return () => {
+      BackgroundGuardian.disableScreenWakeLock();
+    };
+  }, []);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <Video
+        source={source}
+        style={{ width: '100%', height: '100%' }}
+        paused={!isPlaying}
+        onLoad={() => setIsPlaying(true)}
+        onEnd={() => setIsPlaying(false)}
+      />
+    </View>
+  );
+}
+```
+
+### Location tracking with wake lock
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+import * as Location from 'expo-location';
+
+class LocationTracker {
+  private subscription: Location.LocationSubscription | null = null;
+  private isTracking = false;
+
+  async startTracking(onLocationUpdate: (location: Location.LocationObject) => void) {
+    // First, ensure battery optimization exemption
+    const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    if (!isIgnoring) {
+      console.warn('Battery optimization not disabled - tracking may be unreliable');
+    }
+
+    // Acquire wake lock for continuous tracking
+    const acquired = await BackgroundGuardian.acquireWakeLock(
+      'LocationTracking',
+      4 * 60 * 60 * 1000 // 4 hours
+    );
+
+    if (!acquired) {
+      throw new Error('Failed to acquire wake lock');
+    }
+
+    try {
+      // Request location permissions
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Location permission denied');
+      }
+
+      // Start location updates
+      this.subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000, // 10 seconds
+          distanceInterval: 10, // 10 meters
+        },
+        onLocationUpdate
+      );
+
+      this.isTracking = true;
+      console.log('Location tracking started');
+    } catch (error) {
+      console.error('Failed to start tracking:', error);
+      // Release wake lock on error
+      await BackgroundGuardian.releaseWakeLock();
+      throw error;
+    }
+  }
+
+  async stopTracking() {
+    if (this.subscription) {
+      this.subscription.remove();
+      this.subscription = null;
+    }
+
+    this.isTracking = false;
+
+    // Release wake lock
+    await BackgroundGuardian.releaseWakeLock();
+    console.log('Location tracking stopped');
+  }
+}
+```
+
+### Kiosk mode (always-on display)
+
+```typescript
+import { useEffect } from 'react';
+import { View, Text } from 'react-native';
+import BackgroundGuardian from 'react-native-background-guardian';
+
+export function KioskScreen() {
+  useEffect(() => {
+    async function enterKioskMode() {
+      // Enable screen wake lock
+      await BackgroundGuardian.enableScreenWakeLock();
+      
+      // Also acquire partial wake lock to keep CPU active
+      await BackgroundGuardian.acquireWakeLock('KioskMode');
+      
+      console.log('Entered kiosk mode');
+    }
+
+    async function exitKioskMode() {
+      // Disable screen wake lock
+      await BackgroundGuardian.disableScreenWakeLock();
+      
+      // Release partial wake lock
+      await BackgroundGuardian.releaseWakeLock();
+      
+      console.log('Exited kiosk mode');
+    }
+
+    enterKioskMode();
+
+    return () => {
+      exitKioskMode();
+    };
+  }, []);
+
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: 48 }}>Kiosk Display</Text>
+      <Text>Screen will stay on indefinitely</Text>
+    </View>
+  );
+}
+```
+
+## Best practices
+
+### 1. Always use timeouts
+
+Never acquire a wake lock without a timeout:
+
+```typescript
+// ❌ Bad: No timeout (uses 24-hour default)
+await BackgroundGuardian.acquireWakeLock('Task');
+
+// ✅ Good: Appropriate timeout for task duration
+await BackgroundGuardian.acquireWakeLock('Task', 10 * 60 * 1000); // 10 minutes
+```
+
+### 2. Release in finally blocks
+
+Always release wake locks, even if errors occur:
+
+```typescript
+try {
+  await BackgroundGuardian.acquireWakeLock('Upload', 30 * 60 * 1000);
+  await uploadLargeFile();
+} catch (error) {
+  console.error('Upload failed:', error);
+} finally {
+  // Always release, even on error
+  await BackgroundGuardian.releaseWakeLock();
+}
+```
+
+### 3. Use descriptive tags
+
+Use meaningful tags for easier debugging:
+
+```typescript
+// ❌ Bad: Generic tags
+await BackgroundGuardian.acquireWakeLock('task');
+
+// ✅ Good: Descriptive tags
+await BackgroundGuardian.acquireWakeLock('MusicPlayback:Track123');
+await BackgroundGuardian.acquireWakeLock('FileSync:Photos');
+await BackgroundGuardian.acquireWakeLock('LocationTracking:WorkoutSession');
+```
+
+### 4. Check wake lock status
+
+Verify wake lock status before critical operations:
+
+```typescript
+async function performCriticalTask() {
+  const isHeld = await BackgroundGuardian.isWakeLockHeld();
+  
+  if (!isHeld) {
+    console.warn('Wake lock not held - task may be interrupted');
+    await BackgroundGuardian.acquireWakeLock('CriticalTask', 15 * 60 * 1000);
+  }
+  
+  await doWork();
+}
+```
+
+### 5. Combine with battery optimization exemptions
+
+For reliable background execution, combine wake locks with battery optimization exemptions:
+
+```typescript
+async function setupReliableBackgroundTask() {
+  // Step 1: Check battery optimization status
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    Alert.alert(
+      'Setup Required',
+      'Please disable battery optimization for reliable background operation.',
+      [{ text: 'OK', onPress: () => BackgroundGuardian.openBatteryOptimizationSettings() }]
+    );
+    return;
+  }
+
+  // Step 2: Acquire wake lock
+  const acquired = await BackgroundGuardian.acquireWakeLock('BackgroundTask', 60 * 60 * 1000);
+  
+  if (acquired) {
+    // Step 3: Start background work
+    await startBackgroundWork();
+  }
+}
+```
+
+### 6. Monitor battery impact
+
+Track wake lock usage and inform users about battery impact:
+
+```typescript
+import { NativeModules } from 'react-native';
+
+class WakeLockMonitor {
+  private acquisitionTime: number | null = null;
+
+  async acquire(tag: string, timeout: number) {
+    this.acquisitionTime = Date.now();
+    const acquired = await BackgroundGuardian.acquireWakeLock(tag, timeout);
+    return acquired;
+  }
+
+  async release() {
+    const released = await BackgroundGuardian.releaseWakeLock();
+    
+    if (released && this.acquisitionTime) {
+      const duration = Date.now() - this.acquisitionTime;
+      console.log(`Wake lock held for ${duration}ms`);
+      
+      // Track for analytics
+      trackWakeLockUsage(duration);
+      
+      this.acquisitionTime = null;
+    }
+    
+    return released;
+  }
+}
+```
+
+## Debugging wake locks
+
+You can verify wake lock behavior using ADB:
+
+### Check active wake locks
+
+```bash
+# View all wake locks on the device
+adb shell dumpsys power | grep "Wake Locks"
+
+# Search for your app's wake locks
+adb shell dumpsys power | grep "BackgroundGuardian"
+```
+
+### Monitor wake lock acquisition
+
+```bash
+# Watch logs for wake lock events
+adb logcat | grep "BackgroundGuardian"
+
+# Output will show:
+# BackgroundGuardian: Wake lock acquired with tag: BackgroundGuardian:WakeLock:YourTag, timeout: 600000ms
+# BackgroundGuardian: Wake lock released successfully
+```
+
+### Check battery stats
+
+```bash
+# View battery usage statistics for your app
+adb shell dumpsys batterystats --charged your.package.name
+
+# This shows how long wake locks were held
+```
+
+## Limitations
+
+### 1. Doze mode interference
+
+Wake locks may be ignored during Doze mode unless you're exempt from battery optimizations:
+
+```typescript
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+
+if (!isIgnoring) {
+  console.warn('Wake locks may be ignored during Doze mode');
+}
+```
+
+See the [Doze and App Standby](/concepts/doze-and-app-standby) page for details.
+
+### 2. Power Save mode restrictions
+
+Wake locks are less effective when Power Save (Battery Saver) mode is active:
+
+```typescript
+const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+
+if (isPowerSave) {
+  Alert.alert(
+    'Battery Saver Active',
+    'Background tasks may be limited. Disable Battery Saver for best results.'
+  );
+}
+```
+
+### 3. OEM-specific killing
+
+Wake locks don't prevent OEM-specific app killers from terminating your app. See the [OEM Restrictions](/concepts/oem-restrictions) page.
+
+### 4. Foreground services recommended
+
+For long-running tasks, combine wake locks with a foreground service to prevent the system from considering your app idle:
+
+```typescript
+// Use another library for foreground services
+import BackgroundService from 'react-native-background-actions';
+
+async function startLongRunningTask() {
+  // Start foreground service
+  await BackgroundService.start(taskHandler, options);
+  
+  // Also acquire wake lock
+  await BackgroundGuardian.acquireWakeLock('LongTask', 4 * 60 * 60 * 1000);
+}
+```
+
+## Related topics
+
+- [Doze and App Standby](/concepts/doze-and-app-standby) - How Doze mode affects wake locks
+- [Battery Optimization](/concepts/battery-optimization) - Exemptions for reliable background execution
+- [OEM Restrictions](/concepts/oem-restrictions) - Manufacturer-specific battery management

@@ -1,0 +1,131 @@
+---
+title: disableScreenWakeLock
+description: Allow the display to turn off normally
+---
+
+## Overview
+
+Disables the screen wake lock, allowing the display to turn off normally according to the device's sleep settings.
+
+```typescript
+function disableScreenWakeLock(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if the screen wake lock was disabled, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Clears `FLAG_KEEP_SCREEN_ON` on the current Activity window. |
+| **iOS** | Re-enables the idle timer (`UIApplication.shared.isIdleTimerDisabled = false`). |
+
+## Important Notes
+
+- **Always Disable**: Call this method when you no longer need the screen to stay on to preserve battery.
+- **Activity Required**: On Android, this requires a current Activity. Returns `false` if no Activity is available.
+- **Safe to Call**: It's safe to call this method even if screen wake lock wasn't enabled.
+- **Automatic Cleanup**: The system automatically clears screen wake locks when the Activity is destroyed, but it's good practice to disable manually.
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { disableScreenWakeLock } from 'react-native-background-guardian';
+
+await disableScreenWakeLock();
+console.log('Screen can now turn off');
+```
+
+### With Enable/Disable Pair
+
+```typescript
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+// Enable during video playback
+await enableScreenWakeLock();
+await playVideo();
+
+// Disable when done
+await disableScreenWakeLock();
+```
+
+### In useEffect Cleanup
+
+```typescript
+import { useEffect } from 'react';
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+function VideoScreen() {
+  useEffect(() => {
+    enableScreenWakeLock();
+
+    // Cleanup: disable when component unmounts
+    return () => {
+      disableScreenWakeLock();
+    };
+  }, []);
+
+  return <VideoPlayer />;
+}
+```
+
+### Toggle Function
+
+```typescript
+import { useState } from 'react';
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+function ScreenLockToggle() {
+  const [isEnabled, setIsEnabled] = useState(false);
+
+  const toggle = async () => {
+    if (isEnabled) {
+      await disableScreenWakeLock();
+      setIsEnabled(false);
+    } else {
+      await enableScreenWakeLock();
+      setIsEnabled(true);
+    }
+  };
+
+  return (
+    <Button 
+      title={isEnabled ? 'Allow Screen Sleep' : 'Keep Screen On'}
+      onPress={toggle}
+    />
+  );
+}
+```
+
+### Navigation Hook
+
+```typescript
+import { useFocusEffect } from '@react-navigation/native';
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+function MapScreen() {
+  useFocusEffect(
+    useCallback(() => {
+      // Enable when screen is focused
+      enableScreenWakeLock();
+
+      // Disable when screen loses focus
+      return () => {
+        disableScreenWakeLock();
+      };
+    }, [])
+  );
+
+  return <MapView />;
+}
+```
+
+## Related APIs
+
+- [`enableScreenWakeLock()`](/api/enable-screen-wake-lock) - Keep screen on

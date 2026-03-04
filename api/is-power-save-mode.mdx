@@ -1,0 +1,305 @@
+---
+title: isPowerSaveMode
+description: Check if the device is in Power Save (Battery Saver) mode
+---
+
+## Overview
+
+Checks if the device is in Power Save (Battery Saver) mode. This is a system-wide setting that affects ALL apps, regardless of battery optimization exemptions.
+
+```typescript
+function isPowerSaveMode(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="isPowerSave" type="boolean">
+  Promise resolving to `true` if power save mode is enabled, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Checks `PowerManager.isPowerSaveMode()`. Available on API 21+ (Android 5.0+). Returns `false` on older versions. |
+| **iOS** | Always returns `false`. |
+
+## What is Power Save Mode?
+
+Power Save (Battery Saver) mode is a user-activated setting to extend battery life. When active, the system may:
+
+**System Restrictions**:
+- 🔴 Throttle CPU performance
+- 🔴 Reduce screen brightness
+- 🔴 Limit or disable background data
+- 🔴 Reduce location update frequency
+- 🔴 Defer background jobs
+- 🔴 Disable vibration
+- 🔴 Limit sync adapters
+- 🔴 Disable certain visual effects
+
+**Key Difference from Battery Optimization**:
+
+| Feature | Power Save Mode | Battery Optimization |
+|---------|-----------------|---------------------|
+| **Scope** | System-wide, all apps | Per-app |
+| **Control** | User toggles globally | User exempts specific apps |
+| **Can be bypassed** | ❌ Affects all apps | ✅ Apps can be exempted |
+| **When active** | Only when user enables | Always (unless exempt) |
+
+<Note>
+  Even if your app is exempt from battery optimizations using [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations), it will STILL be affected by Power Save mode when the user enables it.
+</Note>
+
+## Use Cases
+
+✅ **When to check**:
+- Before starting intensive operations
+- To inform users why features are limited
+- To adjust app behavior (reduce sync frequency, etc.)
+- For debugging performance issues
+
+## Example Usage
+
+### Basic Check
+
+```typescript
+import { isPowerSaveMode } from 'react-native-background-guardian';
+
+const isPowerSave = await isPowerSaveMode();
+
+if (isPowerSave) {
+  console.log('Device is in Battery Saver mode');
+} else {
+  console.log('Device is in normal mode');
+}
+```
+
+### Alert User About Limitations
+
+```typescript
+import { Alert } from 'react-native';
+import { isPowerSaveMode, openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+async function checkPowerSaveMode() {
+  const isPowerSave = await isPowerSaveMode();
+  
+  if (isPowerSave) {
+    Alert.alert(
+      'Battery Saver Active',
+      'Background features may be limited while Battery Saver is on. Disable Battery Saver for the best experience.',
+      [
+        { text: 'OK', style: 'cancel' },
+        { 
+          text: 'Open Settings', 
+          onPress: () => openPowerSaveModeSettings() 
+        }
+      ]
+    );
+  }
+}
+```
+
+### Adaptive Sync Frequency
+
+```typescript
+import { isPowerSaveMode } from 'react-native-background-guardian';
+
+class DataSyncManager {
+  async getSyncInterval() {
+    const isPowerSave = await isPowerSaveMode();
+    
+    if (isPowerSave) {
+      // Less frequent syncing in power save mode
+      return 30 * 60 * 1000; // 30 minutes
+    } else {
+      // Normal sync frequency
+      return 5 * 60 * 1000; // 5 minutes
+    }
+  }
+  
+  async scheduleSync() {
+    const interval = await this.getSyncInterval();
+    setInterval(() => this.performSync(), interval);
+  }
+}
+```
+
+### Status Banner
+
+```typescript
+import { useState, useEffect } from 'react';
+import { isPowerSaveMode } from 'react-native-background-guardian';
+
+function PowerSaveBanner() {
+  const [showBanner, setShowBanner] = useState(false);
+
+  useEffect(() => {
+    const checkPowerSave = async () => {
+      const isPowerSave = await isPowerSaveMode();
+      setShowBanner(isPowerSave);
+    };
+
+    checkPowerSave();
+    
+    // Re-check when app comes to foreground
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkPowerSave();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  if (!showBanner) return null;
+
+  return (
+    <View style={{ backgroundColor: 'orange', padding: 10 }}>
+      <Text>⚠️ Battery Saver is on - some features may be limited</Text>
+    </View>
+  );
+}
+```
+
+### Comprehensive Status Check
+
+```typescript
+import { 
+  isPowerSaveMode, 
+  isDeviceIdleMode, 
+  isIgnoringBatteryOptimizations 
+} from 'react-native-background-guardian';
+
+async function getDevicePowerStatus() {
+  const [powerSave, dozeMode, batteryExempt] = await Promise.all([
+    isPowerSaveMode(),
+    isDeviceIdleMode(),
+    isIgnoringBatteryOptimizations()
+  ]);
+
+  return {
+    powerSave,
+    dozeMode,
+    batteryExempt,
+    // Determine overall background capability
+    canRunInBackground: batteryExempt && !powerSave && !dozeMode
+  };
+}
+
+// Usage
+const status = await getDevicePowerStatus();
+if (!status.canRunInBackground) {
+  console.log('Background execution may be limited');
+}
+```
+
+### Settings Screen
+
+```typescript
+import { useState, useEffect } from 'react';
+import { isPowerSaveMode, openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+function PowerSettingsScreen() {
+  const [isPowerSave, setIsPowerSave] = useState(false);
+
+  const checkStatus = async () => {
+    const status = await isPowerSaveMode();
+    setIsPowerSave(status);
+  };
+
+  useEffect(() => {
+    checkStatus();
+    
+    const interval = setInterval(checkStatus, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View>
+      <Text>Battery Saver Mode</Text>
+      <Text>Status: {isPowerSave ? '🟡 On' : '🟢 Off'}</Text>
+      
+      {isPowerSave && (
+        <View>
+          <Text style={{ color: 'orange' }}>
+            Battery Saver limits background activity and performance
+          </Text>
+          <Button 
+            title="Open Battery Saver Settings" 
+            onPress={openPowerSaveModeSettings}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Disable Auto-Sync in Power Save
+
+```typescript
+import { isPowerSaveMode } from 'react-native-background-guardian';
+
+class AutoSyncService {
+  private syncInterval: NodeJS.Timeout | null = null;
+
+  async start() {
+    const isPowerSave = await isPowerSaveMode();
+    
+    if (isPowerSave) {
+      console.log('Auto-sync disabled due to Battery Saver');
+      this.stop();
+      return;
+    }
+    
+    this.syncInterval = setInterval(() => {
+      this.performSync();
+    }, 300000); // 5 minutes
+  }
+
+  stop() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+  }
+}
+```
+
+## Android API Levels
+
+Power Save mode was introduced in Android 5.0 (API 21):
+
+- **API < 21**: Always returns `false`
+- **API ≥ 21**: Returns actual system state
+
+## Battery Optimization vs Power Save Mode
+
+Understanding the difference:
+
+```typescript
+import { 
+  isPowerSaveMode, 
+  isIgnoringBatteryOptimizations 
+} from 'react-native-background-guardian';
+
+const powerSave = await isPowerSaveMode();
+const batteryExempt = await isIgnoringBatteryOptimizations();
+
+if (powerSave && batteryExempt) {
+  console.log('App is exempt BUT Battery Saver overrides it');
+  console.log('Background features will still be limited');
+}
+
+if (!powerSave && !batteryExempt) {
+  console.log('Battery Saver is off BUT app is still optimized');
+  console.log('App may be restricted by Doze mode');
+}
+```
+
+## Related APIs
+
+- [`openPowerSaveModeSettings()`](/api/open-power-save-mode-settings) - Open Battery Saver settings
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check battery optimization (different concept)
+- [`isDeviceIdleMode()`](/api/is-device-idle-mode) - Check Doze mode status

@@ -1,97 +1,370 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: React Native Background Guardian
+mode: custom
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#cb0404] via-[#a00303] to-[#8b0202] dark:from-[#0f1117] dark:via-[#1a1d27] dark:to-[#242838]">
+  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMzLjMxNCAwIDYgMi42ODYgNiA2cy0yLjY4NiA2LTYgNi02LTIuNjg2LTYtNiAyLjY4Ni02IDYtNnoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wNSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9nPjwvc3ZnPg==')] opacity-10"></div>
+  <div className="relative max-w-7xl mx-auto px-6 sm:px-8 py-16 sm:py-20 lg:py-24">
+    <div className="lg:grid lg:grid-cols-12 lg:gap-12 items-center">
+      <div className="lg:col-span-7 text-center lg:text-left">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white dark:text-gray-100 mb-6">
+          Keep Your React Native Apps Alive in the Background
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 dark:text-gray-300 max-w-2xl mx-auto lg:mx-0 mb-8">
+          Prevent Android from killing background processes with Wake Locks, battery optimization exemptions, and OEM-specific protections. iOS-safe with no-op implementation.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start flex-wrap">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-white text-[#cb0404] font-semibold hover:bg-gray-100 transition-colors shadow-lg"
+          >
+            Get Started
+            <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a
+            href="/api/overview"
+            className="inline-flex items-center justify-center px-6 py-3 rounded-full border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 hover:border-white/50 transition-colors backdrop-blur-sm"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block lg:col-span-5 mt-12 lg:mt-0">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#cb0404]/20 to-transparent rounded-2xl blur-3xl"></div>
+          <div className="relative bg-[#1a1d27] dark:bg-[#0f1117] rounded-2xl p-6 border border-white/10 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <pre className="text-sm text-gray-300 dark:text-gray-400 overflow-x-auto">
+              <code>{`import BackgroundGuardian from
+  'react-native-background-guardian';
 
-Get your documentation site up and running in minutes.
+// Acquire wake lock
+await BackgroundGuardian
+  .acquireWakeLock('MyTask');
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+// Check battery optimization
+const isIgnoring = await
+  BackgroundGuardian
+  .isIgnoringBatteryOptimizations();
 
-## Make it yours
+// Request exemption
+if (!isIgnoring) {
+  await BackgroundGuardian
+    .requestBatteryOptimization
+    Exemption();
+}`}</code>
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Design a docs site that looks great and empowers your users.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Quick start
+    </h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Get your app protected from background restrictions in minutes
+    </p>
+  </div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
+  <Steps>
+    <Step title="Install the package">
+      Add React Native Background Guardian to your project using your preferred package manager:
+      
+      <CodeGroup>
+      ```bash npm
+      npm install react-native-background-guardian
+      ```
+      ```bash yarn
+      yarn add react-native-background-guardian
+      ```
+      ```bash pnpm
+      pnpm add react-native-background-guardian
+      ```
+      </CodeGroup>
+
+      For iOS, install pods:
+      ```bash
+      cd ios && pod install
+      ```
+    </Step>
+
+    <Step title="Import and use wake locks">
+      Import the library and acquire a wake lock to keep the CPU running during background tasks:
+
+      ```typescript
+      import BackgroundGuardian from 'react-native-background-guardian';
+
+      // Acquire wake lock before starting background work
+      const acquired = await BackgroundGuardian.acquireWakeLock('MyBackgroundTask');
+      
+      if (acquired) {
+        // Perform your background work
+        await doBackgroundWork();
+        
+        // Release when done
+        await BackgroundGuardian.releaseWakeLock();
+      }
+      ```
+    </Step>
+
+    <Step title="Request battery optimization exemption">
+      Check if your app is exempt from battery optimizations and request exemption if needed:
+
+      ```typescript
+      // Check current status
+      const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+      
+      if (!isIgnoring) {
+        // Show the system dialog to request exemption
+        await BackgroundGuardian.requestBatteryOptimizationExemption();
+      }
+      ```
+
+      <Warning>
+        Google Play has restrictions on using `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`. Only use this if your app genuinely requires background execution (messaging, health tracking, device management, etc.).
+      </Warning>
+    </Step>
+
+    <Step title="Handle OEM-specific restrictions">
+      Many manufacturers (Xiaomi, Huawei, Samsung) have additional battery optimization. Guide users to whitelist your app:
+
+      ```typescript
+      const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+      
+      if (['xiaomi', 'huawei', 'oppo', 'vivo'].includes(manufacturer ?? '')) {
+        // Open OEM-specific settings
+        await BackgroundGuardian.openOEMSettings();
+      }
+      ```
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Explore by topic
+    </h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Everything you need to keep your app running reliably in the background
+    </p>
+  </div>
+
+  <CardGroup cols={2}>
     <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      title="Wake Lock Management"
+      icon="lock"
+      href="/concepts/wake-locks"
+    >
+      Keep the CPU running during background tasks with partial and screen wake locks.
+    </Card>
+    <Card
+      title="Battery Optimization"
+      icon="battery-full"
+      href="/concepts/battery-optimization"
+    >
+      Request exemption from Doze mode and App Standby restrictions.
+    </Card>
+    <Card
+      title="OEM Restrictions"
+      icon="mobile"
+      href="/concepts/oem-restrictions"
+    >
+      Navigate manufacturer-specific battery savers from Xiaomi, Samsung, Huawei, and more.
+    </Card>
+    <Card
+      title="Doze & App Standby"
+      icon="moon"
+      href="/concepts/doze-and-app-standby"
+    >
+      Understand Android's power-saving features and how to work with them.
+    </Card>
+  </CardGroup>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Key features
+    </h2>
+  </div>
 
-Everything you need to create world-class documentation.
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#cb0404] dark:hover:border-[#cb0404] transition-colors">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-lg bg-[#cb0404]/10 dark:bg-[#cb0404]/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#cb0404]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">Wake Lock Management</h3>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Keep CPU running during background tasks with partial and screen wake locks.
+      </p>
+    </div>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+    <div className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#cb0404] dark:hover:border-[#cb0404] transition-colors">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-lg bg-[#cb0404]/10 dark:bg-[#cb0404]/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#cb0404]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">Battery Exemption</h3>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Request Doze mode whitelist to run background tasks more freely.
+      </p>
+    </div>
 
-## Need inspiration?
+    <div className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#cb0404] dark:hover:border-[#cb0404] transition-colors">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-lg bg-[#cb0404]/10 dark:bg-[#cb0404]/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#cb0404]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">OEM-Specific Settings</h3>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Navigate to manufacturer battery settings for Xiaomi, Samsung, Huawei, and more.
+      </p>
+    </div>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    <div className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#cb0404] dark:hover:border-[#cb0404] transition-colors">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-lg bg-[#cb0404]/10 dark:bg-[#cb0404]/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#cb0404]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+          </svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">Cross-Platform</h3>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        iOS-safe implementation with no-op methods that return safe defaults.
+      </p>
+    </div>
+
+    <div className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#cb0404] dark:hover:border-[#cb0404] transition-colors">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-lg bg-[#cb0404]/10 dark:bg-[#cb0404]/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#cb0404]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">TypeScript Support</h3>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Full type definitions included for excellent IDE autocomplete and type safety.
+      </p>
+    </div>
+
+    <div className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] p-6 hover:border-[#cb0404] dark:hover:border-[#cb0404] transition-colors">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-lg bg-[#cb0404]/10 dark:bg-[#cb0404]/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#cb0404]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">New Architecture Ready</h3>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Built as a Turbo Module for React Native's new architecture.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Resources
+    </h2>
+  </div>
+
+  <CardGroup cols={3}>
+    <Card
+      title="Usage Examples"
+      icon="code"
+      href="/guides/usage-examples"
+    >
+      Real-world examples for audio players, location tracking, and kiosk mode.
+    </Card>
+    <Card
+      title="Platform Differences"
+      icon="arrows-left-right"
+      href="/guides/platform-differences"
+    >
+      Understand how the library behaves on Android vs iOS.
+    </Card>
+    <Card
+      title="Testing & Debugging"
+      icon="bug"
+      href="/guides/testing-and-debugging"
+    >
+      Test Doze mode with ADB and debug wake lock issues.
+    </Card>
+    <Card
+      title="OEM Compatibility"
+      icon="table"
+      href="/resources/oem-compatibility"
+    >
+      Complete list of supported manufacturers and their settings.
+    </Card>
+    <Card
+      title="Troubleshooting"
+      icon="wrench"
+      href="/guides/troubleshooting"
+    >
+      Common issues and solutions for wake locks and battery optimization.
+    </Card>
+    <Card
+      title="FAQ"
+      icon="circle-question"
+      href="/resources/faq"
+    >
+      Frequently asked questions about background execution.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl bg-gradient-to-br from-[#cb0404] to-[#8b0202] dark:from-[#1a1d27] dark:to-[#242838] border border-[#cb0404]/20 dark:border-[#27272a] p-8 sm:p-12 text-center">
+    <h2 className="text-3xl sm:text-4xl font-bold text-white dark:text-gray-100 mb-4">
+      Ready to get started?
+    </h2>
+    <p className="text-lg text-white/90 dark:text-gray-300 max-w-2xl mx-auto mb-8">
+      Install React Native Background Guardian and start protecting your app from aggressive battery optimization today.
+    </p>
+    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+      <a
+        href="/quickstart"
+        className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-white text-[#cb0404] font-semibold hover:bg-gray-100 transition-colors shadow-lg"
+      >
+        View Quickstart
+        <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+      <a
+        href="https://github.com/ivangonzalezg/react-native-background-guardian"
+        className="inline-flex items-center justify-center px-6 py-3 rounded-full border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 hover:border-white/50 transition-colors backdrop-blur-sm"
+      >
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,131 @@
+---
+title: OEM compatibility
+description: Complete list of Android manufacturers with OEM-specific battery settings support
+---
+
+Many Android manufacturers implement aggressive battery optimization that can kill apps even when standard Android battery optimizations are disabled. The `openOEMSettings()` method provides direct access to manufacturer-specific battery and autostart settings.
+
+## Supported manufacturers
+
+The following table lists all manufacturers with dedicated OEM settings support:
+
+| Manufacturer | Brand/OS      | Support status | Fallback behavior                    |
+| ------------ | ------------- | -------------- | ------------------------------------ |
+| Xiaomi       | MIUI          | ✅ Supported   | Battery optimization settings        |
+| Huawei       | EMUI          | ✅ Supported   | Battery optimization settings        |
+| Honor        | Magic UI      | ✅ Supported   | Battery optimization settings        |
+| Samsung      | OneUI         | ✅ Supported   | Battery optimization settings        |
+| Oppo         | ColorOS       | ✅ Supported   | Battery optimization settings        |
+| Vivo         | FuntouchOS    | ✅ Supported   | Battery optimization settings        |
+| OnePlus      | OxygenOS      | ✅ Supported   | Battery optimization settings        |
+| Realme       | Realme UI     | ✅ Supported   | Battery optimization settings        |
+| Asus         | ZenUI         | ✅ Supported   | Battery optimization settings        |
+| Lenovo       | -             | ✅ Supported   | Battery optimization settings        |
+| Meizu        | Flyme         | ✅ Supported   | Battery optimization settings        |
+| Nokia        | -             | ✅ Supported   | Battery optimization settings        |
+| Other        | Stock Android | ⚡ Fallback    | App details settings                 |
+
+## How it works
+
+When you call `openOEMSettings()`, the library:
+
+1. **Detects the manufacturer** using `Build.MANUFACTURER`
+2. **Tries OEM-specific intents** - Multiple activities are attempted per manufacturer as they vary between OS versions
+3. **Falls back gracefully** if no OEM settings are found:
+   - First tries `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS` (battery optimization list)
+   - Then falls back to `ACTION_APPLICATION_DETAILS_SETTINGS` (app details page)
+
+## OEM-specific settings
+
+### Xiaomi (MIUI)
+
+MIUI has some of the most aggressive battery optimization. The library opens:
+- Autostart management activity
+- Power center settings
+
+Users typically need to:
+- Enable "Autostart"
+- Disable battery optimization
+- Set battery saver to "No restrictions"
+
+### Huawei (EMUI) & Honor (Magic UI)
+
+Huawei and Honor devices require:
+- Enabling the app in startup manager
+- Adding to protected apps list
+- Disabling app launch restrictions
+
+### Oppo (ColorOS) & Realme (Realme UI)
+
+ColorOS-based devices need:
+- Enabling startup in background
+- Disabling battery optimization
+- Allowing auto-launch
+
+### Vivo (FuntouchOS)
+
+Vivo devices require:
+- Enabling background activity
+- Adding to high background power consumption whitelist
+- Allowing auto-start
+
+### Samsung (OneUI)
+
+Samsung devices are less aggressive but may need:
+- Disabling "Put app to sleep"
+- Removing from "Sleeping apps" list
+- Enabling background activity
+
+### OnePlus (OxygenOS)
+
+OnePlus devices may require:
+- Disabling battery optimization
+- Allowing background activity
+- Disabling adaptive battery restrictions
+
+### Other manufacturers
+
+For Asus, Lenovo, Meizu, and Nokia devices, the library opens their respective battery management interfaces where users can whitelist your app.
+
+## Testing on different devices
+
+To test OEM compatibility:
+
+```typescript
+import BackgroundGuardian from "react-native-background-guardian";
+
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+console.log(`Testing on: ${manufacturer}`);
+
+const opened = await BackgroundGuardian.openOEMSettings();
+if (opened) {
+  console.log("OEM settings opened successfully");
+} else {
+  console.log("Fell back to standard settings");
+}
+```
+
+## Version compatibility
+
+OEM settings activities may change between OS versions. The library attempts multiple known activities per manufacturer and falls back gracefully if none are found. Some activities may not exist on all device variants or Android versions.
+
+## User guidance
+
+When directing users to OEM settings, provide manufacturer-specific instructions:
+
+```typescript
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+
+if (["xiaomi", "huawei", "oppo", "vivo"].includes(manufacturer ?? "")) {
+  Alert.alert(
+    "Additional setup required",
+    'Please enable "Autostart" and disable battery optimization for reliable background operation.',
+    [
+      {
+        text: "Open settings",
+        onPress: () => BackgroundGuardian.openOEMSettings(),
+      },
+    ],
+  );
+}
+```

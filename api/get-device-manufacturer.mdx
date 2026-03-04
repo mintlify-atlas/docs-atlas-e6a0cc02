@@ -1,0 +1,382 @@
+---
+title: getDeviceManufacturer
+description: Get the device manufacturer name
+---
+
+## Overview
+
+Gets the device manufacturer name. This is useful for determining whether OEM-specific settings might be available or for showing manufacturer-specific instructions to users.
+
+```typescript
+function getDeviceManufacturer(): Promise<string | null>
+```
+
+## Returns
+
+<ResponseField name="manufacturer" type="string | null">
+  Promise resolving to the manufacturer name string (lowercase), or `null` if the manufacturer couldn't be determined.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Returns the value of `Build.MANUFACTURER` in lowercase (e.g., "samsung", "xiaomi", "google", "oneplus"). |
+| **iOS** | Returns `"apple"`. |
+
+## Example Values
+
+Common manufacturer strings:
+
+- `"samsung"` - Samsung devices
+- `"xiaomi"` - Xiaomi/Redmi/POCO devices
+- `"google"` - Google Pixel devices
+- `"oneplus"` - OnePlus devices
+- `"oppo"` - Oppo devices
+- `"vivo"` - Vivo devices
+- `"huawei"` - Huawei devices
+- `"honor"` - Honor devices
+- `"realme"` - Realme devices
+- `"motorola"` - Motorola devices
+- `"apple"` - iOS devices
+
+## Use Cases
+
+✅ **When to use**:
+- Determining if OEM-specific settings are available
+- Showing manufacturer-specific instructions
+- Analytics and debugging
+- Conditional UI based on manufacturer
+- Detecting devices with aggressive battery management
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+const manufacturer = await getDeviceManufacturer();
+console.log('Device manufacturer:', manufacturer);
+
+// Example output:
+// Device manufacturer: xiaomi
+```
+
+### Check for Aggressive Battery Management
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+const manufacturer = await getDeviceManufacturer();
+
+// Manufacturers known for aggressive battery optimization
+const aggressiveManufacturers = [
+  'xiaomi',
+  'huawei', 
+  'honor',
+  'oppo',
+  'vivo',
+  'realme',
+  'samsung'
+];
+
+const needsExtraSetup = manufacturer && 
+  aggressiveManufacturers.includes(manufacturer.toLowerCase());
+
+if (needsExtraSetup) {
+  console.log('⚠️ This device may require additional battery settings');
+}
+```
+
+### Show Manufacturer-Specific Instructions
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+const MANUFACTURER_GUIDES = {
+  xiaomi: {
+    title: 'Xiaomi/MIUI Setup',
+    instructions: [
+      'Open Security app',
+      'Go to Battery & Performance',
+      'Choose App battery saver',
+      'Find your app and set to "No restrictions"',
+      'Enable "Autostart" permission'
+    ],
+    critical: true
+  },
+  samsung: {
+    title: 'Samsung Setup',
+    instructions: [
+      'Open Settings',
+      'Go to Apps',
+      'Find your app',
+      'Ensure it\'s not in "Sleeping apps"'
+    ],
+    critical: false
+  },
+  huawei: {
+    title: 'Huawei/EMUI Setup',
+    instructions: [
+      'Open Settings',
+      'Search for "Protected apps"',
+      'Enable protection for your app'
+    ],
+    critical: true
+  }
+};
+
+async function showSetupGuide() {
+  const manufacturer = await getDeviceManufacturer();
+  const guide = manufacturer ? MANUFACTURER_GUIDES[manufacturer] : null;
+
+  if (guide) {
+    Alert.alert(
+      guide.title,
+      guide.instructions.map((step, i) => `${i + 1}. ${step}`).join('\n'),
+      [{ text: 'OK' }]
+    );
+  }
+}
+```
+
+### Conditional OEM Settings Button
+
+```typescript
+import { getDeviceManufacturer, openOEMSettings } from 'react-native-background-guardian';
+
+function SettingsScreen() {
+  const [manufacturer, setManufacturer] = useState<string | null>(null);
+  const [hasOEMSettings, setHasOEMSettings] = useState(false);
+
+  useEffect(() => {
+    const checkManufacturer = async () => {
+      const mfr = await getDeviceManufacturer();
+      setManufacturer(mfr);
+      
+      // List of manufacturers with known OEM settings
+      const supported = ['xiaomi', 'samsung', 'huawei', 'honor', 'oppo', 'vivo'];
+      setHasOEMSettings(mfr ? supported.includes(mfr.toLowerCase()) : false);
+    };
+
+    checkManufacturer();
+  }, []);
+
+  return (
+    <View>
+      <Text>Device: {manufacturer || 'Unknown'}</Text>
+      
+      {hasOEMSettings && (
+        <Button 
+          title={`Open ${manufacturer} Battery Settings`}
+          onPress={openOEMSettings}
+        />
+      )}
+      
+      {!hasOEMSettings && (
+        <Text>No manufacturer-specific settings available</Text>
+      )}
+    </View>
+  );
+}
+```
+
+### Analytics/Debugging
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+const manufacturer = await getDeviceManufacturer();
+
+// Send to analytics
+analytics.setUserProperty('device_manufacturer', manufacturer);
+
+// Log for debugging
+console.log('=== Device Info ===');
+console.log('Manufacturer:', manufacturer);
+console.log('Platform:', Platform.OS);
+console.log('Version:', Platform.Version);
+```
+
+### Onboarding Logic
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+function OnboardingFlow() {
+  const [screens, setScreens] = useState<string[]>([]);
+
+  useEffect(() => {
+    const buildOnboarding = async () => {
+      const baseScreens = ['Welcome', 'Permissions', 'BatteryOptimization'];
+      
+      const manufacturer = await getDeviceManufacturer();
+      
+      // Add OEM-specific screen for certain manufacturers
+      if (['xiaomi', 'huawei', 'oppo', 'vivo'].includes(manufacturer?.toLowerCase() || '')) {
+        baseScreens.push('OEMSettings');
+      }
+      
+      baseScreens.push('Complete');
+      setScreens(baseScreens);
+    };
+
+    buildOnboarding();
+  }, []);
+
+  return <OnboardingNavigator screens={screens} />;
+}
+```
+
+### Support Helper
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+async function generateSupportInfo() {
+  const manufacturer = await getDeviceManufacturer();
+  
+  return {
+    manufacturer,
+    platform: Platform.OS,
+    version: Platform.Version,
+    appVersion: DeviceInfo.getVersion(),
+    buildNumber: DeviceInfo.getBuildNumber()
+  };
+}
+
+// Usage in support ticket
+const supportInfo = await generateSupportInfo();
+console.log('Include this in your support ticket:', JSON.stringify(supportInfo));
+```
+
+### Manufacturer-Specific Feature Toggle
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+class FeatureFlags {
+  private manufacturer: string | null = null;
+
+  async initialize() {
+    this.manufacturer = await getDeviceManufacturer();
+  }
+
+  get shouldShowOEMWarning() {
+    return ['xiaomi', 'huawei', 'oppo', 'vivo'].includes(
+      this.manufacturer?.toLowerCase() || ''
+    );
+  }
+
+  get hasReliableBackgroundExecution() {
+    // Google Pixel devices typically have more reliable background execution
+    return this.manufacturer?.toLowerCase() === 'google';
+  }
+}
+
+const featureFlags = new FeatureFlags();
+await featureFlags.initialize();
+
+if (featureFlags.shouldShowOEMWarning) {
+  showOEMSetupWarning();
+}
+```
+
+### Device-Specific Workarounds
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+class BackgroundTaskManager {
+  private manufacturer: string | null = null;
+
+  async initialize() {
+    this.manufacturer = await getDeviceManufacturer();
+  }
+
+  getSyncInterval() {
+    // Adjust sync interval based on manufacturer's battery management
+    const manufacturer = this.manufacturer?.toLowerCase();
+    
+    switch (manufacturer) {
+      case 'xiaomi':
+      case 'huawei':
+        // More aggressive battery management
+        return 15 * 60 * 1000; // 15 minutes
+      
+      case 'google':
+      case 'motorola':
+        // More lenient
+        return 5 * 60 * 1000; // 5 minutes
+      
+      default:
+        return 10 * 60 * 1000; // 10 minutes
+    }
+  }
+}
+```
+
+### Display Manufacturer Name
+
+```typescript
+import { getDeviceManufacturer } from 'react-native-background-guardian';
+
+function AboutScreen() {
+  const [manufacturer, setManufacturer] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDeviceManufacturer().then(setManufacturer);
+  }, []);
+
+  const displayName = manufacturer 
+    ? manufacturer.charAt(0).toUpperCase() + manufacturer.slice(1)
+    : 'Unknown';
+
+  return (
+    <View>
+      <Text>Device Information</Text>
+      <Text>Manufacturer: {displayName}</Text>
+      <Text>Platform: {Platform.OS}</Text>
+      <Text>Version: {Platform.Version}</Text>
+    </View>
+  );
+}
+```
+
+## Handling Null Values
+
+The method returns `null` if the manufacturer cannot be determined:
+
+```typescript
+const manufacturer = await getDeviceManufacturer();
+
+if (!manufacturer) {
+  console.log('Could not determine manufacturer');
+  // Use fallback behavior
+} else {
+  console.log('Manufacturer:', manufacturer);
+}
+```
+
+## Case Sensitivity
+
+The returned manufacturer name is always **lowercase** for easier comparison:
+
+```typescript
+const manufacturer = await getDeviceManufacturer();
+
+// ✅ Correct: No need to call .toLowerCase()
+if (manufacturer === 'xiaomi') {
+  // ...
+}
+
+// ❌ Incorrect: Don't do this
+if (manufacturer?.toLowerCase() === 'xiaomi') {
+  // Already lowercase!
+}
+```
+
+## Related APIs
+
+- [`openOEMSettings()`](/api/open-oem-settings) - Open manufacturer-specific settings

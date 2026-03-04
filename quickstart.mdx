@@ -1,80 +1,272 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with React Native Background Guardian in minutes with this step-by-step guide.
 ---
 
-## Get started in three steps
+## Quick start guide
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through the basic setup and usage of React Native Background Guardian to ensure your app can run reliably in the background on Android devices.
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Install the library">
+    Add React Native Background Guardian to your project:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    <CodeGroup>
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```bash npm
+    npm install react-native-background-guardian
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash yarn
+    yarn add react-native-background-guardian
+    ```
+    
+    ```bash pnpm
+    pnpm add react-native-background-guardian
+    ```
+    
+    </CodeGroup>
+    
+    For iOS projects, install pods:
+    
+    ```bash
+    cd ios && pod install
+    ```
+  </Step>
+  
+  <Step title="Import and use wake locks">
+    Import the library and use wake locks to keep the CPU running during background tasks:
+    
+    ```typescript
+    import BackgroundGuardian from 'react-native-background-guardian';
+    
+    // Acquire wake lock before starting background work
+    const acquired = await BackgroundGuardian.acquireWakeLock(
+      'MyBackgroundTask',
+      10 * 60 * 1000 // 10 minutes timeout
+    );
+    
+    if (acquired) {
+      // Perform background work
+      await doBackgroundWork();
+      
+      // Release wake lock when done
+      await BackgroundGuardian.releaseWakeLock();
+    }
+    ```
+    
+    <Tip>
+      The wake lock timeout defaults to 24 hours (86,400,000 ms). Always release the wake lock when your work is complete to preserve battery life.
+    </Tip>
+  </Step>
+  
+  <Step title="Check battery optimization status">
+    Check if your app is exempt from battery optimizations and request exemption if needed:
+    
+    ```typescript
+    import BackgroundGuardian from 'react-native-background-guardian';
+    import { Alert } from 'react-native';
+    
+    async function checkBatteryOptimization() {
+      const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+      
+      if (!isIgnoring) {
+        Alert.alert(
+          'Battery Optimization',
+          'For reliable background operation, please allow this app to run in the background.',
+          [
+            {
+              text: 'Allow',
+              onPress: async () => {
+                await BackgroundGuardian.requestBatteryOptimizationExemption();
+              }
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      }
+    }
+    ```
+    
+    <Warning>
+      Google Play restricts the `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission. Only use it if your app genuinely requires background execution (messaging, health tracking, device management, etc.).
+    </Warning>
+  </Step>
+  
+  <Step title="Handle OEM-specific settings">
+    Many Android manufacturers have additional battery optimization settings. Guide users to these settings for devices with aggressive battery management:
+    
+    ```typescript
+    import BackgroundGuardian from 'react-native-background-guardian';
+    import { Alert } from 'react-native';
+    
+    async function setupOEMSettings() {
+      const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+      
+      // Check if device has aggressive battery management
+      if (['xiaomi', 'huawei', 'oppo', 'vivo', 'samsung'].includes(
+        manufacturer?.toLowerCase() ?? ''
+      )) {
+        Alert.alert(
+          'Additional Setup Required',
+          `Your ${manufacturer} device requires additional settings to ensure reliable background operation. Please enable "Autostart" and disable battery optimization.`,
+          [
+            {
+              text: 'Open Settings',
+              onPress: async () => {
+                const opened = await BackgroundGuardian.openOEMSettings();
+                if (!opened) {
+                  console.log('Could not open OEM settings');
+                }
+              }
+            },
+            { text: 'Later', style: 'cancel' }
+          ]
+        );
+      }
+    }
+    ```
+    
+    <Note>
+      The library supports OEM settings for Xiaomi, Samsung, Huawei, Honor, OnePlus, Oppo, Vivo, Realme, Asus, and more. For unsupported manufacturers, it falls back to standard battery optimization settings.
+    </Note>
+  </Step>
+  
+  <Step title="Monitor power save mode">
+    Check if Battery Saver mode is active, as it affects all apps regardless of exemption status:
+    
+    ```typescript
+    import BackgroundGuardian from 'react-native-background-guardian';
+    import { Alert } from 'react-native';
+    
+    async function checkPowerSaveMode() {
+      const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+      
+      if (isPowerSave) {
+        Alert.alert(
+          'Battery Saver Active',
+          'Background features may be limited while Battery Saver is enabled.',
+          [
+            {
+              text: 'Open Settings',
+              onPress: () => BackgroundGuardian.openPowerSaveModeSettings()
+            },
+            { text: 'OK', style: 'cancel' }
+          ]
+        );
+      }
+    }
+    ```
+    
+    <Tip>
+      Power Save mode is different from battery optimization exemptions. An app can be exempt from Doze mode but still be affected by Power Save mode restrictions.
+    </Tip>
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Complete example
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Here's a complete example using a React hook to manage background guardian functionality:
 
-### Step 3: Go live
+```typescript
+import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+import BackgroundGuardian from 'react-native-background-guardian';
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+export function useBackgroundGuardian() {
+  const [isReady, setIsReady] = useState(false);
+  const [manufacturer, setManufacturer] = useState<string | null>(null);
+  const [isIgnoringBatteryOpt, setIsIgnoringBatteryOpt] = useState(false);
+
+  const refreshStatus = useCallback(async () => {
+    const ignoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    setIsIgnoringBatteryOpt(ignoring);
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      const mfr = await BackgroundGuardian.getDeviceManufacturer();
+      setManufacturer(mfr);
+      await refreshStatus();
+      setIsReady(true);
+    }
+    init();
+  }, [refreshStatus]);
+
+  // Refresh status when app comes to foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshStatus();
+      }
+    });
+    return () => subscription.remove();
+  }, [refreshStatus]);
+
+  const requestExemption = useCallback(async () => {
+    await BackgroundGuardian.requestBatteryOptimizationExemption();
+    await refreshStatus();
+  }, [refreshStatus]);
+
+  return {
+    isReady,
+    manufacturer,
+    isIgnoringBatteryOpt,
+    requestExemption,
+    openOEMSettings: BackgroundGuardian.openOEMSettings,
+    acquireWakeLock: BackgroundGuardian.acquireWakeLock,
+    releaseWakeLock: BackgroundGuardian.releaseWakeLock,
+  };
+}
+```
+
+## Common use cases
+
+### Background audio player
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+
+async function startAudioPlayback() {
+  // Acquire wake lock to prevent CPU sleep
+  await BackgroundGuardian.acquireWakeLock('AudioPlayer');
+  
+  // Start audio playback
+  await audioPlayer.play();
+}
+
+async function stopAudioPlayback() {
+  // Stop audio playback
+  await audioPlayer.stop();
+  
+  // Release wake lock
+  await BackgroundGuardian.releaseWakeLock();
+}
+```
+
+### Foreground kiosk mode
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+
+async function enterKioskMode() {
+  // Keep the screen on while the app is in the foreground
+  await BackgroundGuardian.enableScreenWakeLock();
+}
+
+async function exitKioskMode() {
+  await BackgroundGuardian.disableScreenWakeLock();
+}
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore all available methods and their parameters
+  </Card>
+  
+  <Card title="Android Doze Mode" icon="moon" href="/concepts/doze-and-app-standby">
+    Learn how to survive Android's battery optimization features
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

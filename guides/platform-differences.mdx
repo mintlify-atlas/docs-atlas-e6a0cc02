@@ -1,0 +1,207 @@
+---
+title: Platform differences
+description: How React Native Background Guardian APIs behave on Android vs iOS
+---
+
+## Overview
+
+React Native Background Guardian is primarily designed for Android, where aggressive battery optimizations can kill background processes. On iOS, the library provides a safe no-op implementation that returns appropriate default values.
+
+## API behavior comparison
+
+### Wake lock management
+
+| Method | Android | iOS |
+|--------|---------|-----|
+| `acquireWakeLock()` | Acquires `PARTIAL_WAKE_LOCK` via PowerManager. Keeps CPU running even when screen is off. Returns `true` on success. | No-op, returns `true`. iOS handles background execution through Background Modes. |
+| `releaseWakeLock()` | Releases the wake lock if held. Returns `true` on success, `false` if no lock was held. | No-op, returns `true`. |
+| `isWakeLockHeld()` | Returns `true` if wake lock is actively held, `false` otherwise. | Always returns `false`. Wake locks don't exist on iOS. |
+
+<Note>
+  On Android, wake locks are reference-counted. Each `acquireWakeLock()` call must be paired with a `releaseWakeLock()` call.
+</Note>
+
+### Screen wake lock
+
+| Method | Android | iOS |
+|--------|---------|-----|
+| `enableScreenWakeLock()` | Adds `FLAG_KEEP_SCREEN_ON` to the current activity window. Screen stays on while app is in foreground. | Disables the idle timer (`UIApplication.shared.isIdleTimerDisabled = true`). Screen stays on while app is in foreground. |
+| `disableScreenWakeLock()` | Clears `FLAG_KEEP_SCREEN_ON` from the activity. Normal screen timeout resumes. | Re-enables the idle timer (`UIApplication.shared.isIdleTimerDisabled = false`). Normal screen timeout resumes. |
+
+<Warning>
+  Screen wake locks do NOT keep the CPU running in the background. They only prevent the screen from turning off while the app is visible. For background work, use `acquireWakeLock()`.
+</Warning>
+
+### Battery optimization
+
+| Method | Android | iOS |
+|--------|---------|-----|
+| `isIgnoringBatteryOptimizations()` | Checks via `PowerManager.isIgnoringBatteryOptimizations()`. Returns `true` if app is whitelisted from Doze mode. | Always returns `true`. iOS doesn't have the same battery optimization system. |
+| `requestBatteryOptimizationExemption()` | Shows `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` system dialog. User must manually approve. Returns `true` if dialog was shown. | No-op, returns `true`. |
+| `openBatteryOptimizationSettings()` | Opens `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS` (system list of apps). User must find app and toggle manually. | No-op, returns `false`. |
+
+<Warning>
+  Google Play restricts use of `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission. Only use `requestBatteryOptimizationExemption()` if your app genuinely requires background execution (messaging, health tracking, device management, etc.). Otherwise, use `openBatteryOptimizationSettings()`.
+</Warning>
+
+### Power save mode
+
+| Method | Android | iOS |
+|--------|---------|-----|
+| `isPowerSaveMode()` | Checks `PowerManager.isPowerSaveMode()`. Returns `true` if Battery Saver is active. Affects ALL apps regardless of exemptions. | Always returns `false`. |
+| `openPowerSaveModeSettings()` | Opens Battery Saver settings page where user can disable it. | No-op, returns `false`. |
+
+<Note>
+  Power Save mode is different from battery optimization exemptions. An app can be exempt from Doze mode but still be affected by Power Save mode restrictions.
+</Note>
+
+### Device idle mode (Doze)
+
+| Method | Android | iOS |
+|--------|---------|-----|
+| `isDeviceIdleMode()` | Checks `PowerManager.isDeviceIdleMode()`. Returns `true` when device is in Doze mode (unplugged, stationary, screen off for extended period). | Always returns `false`. iOS has different background execution model. |
+
+### OEM-specific settings
+
+| Method | Android | iOS |
+|--------|---------|-----|
+| `openOEMSettings()` | Opens manufacturer-specific battery/background settings for Xiaomi, Samsung, Huawei, OnePlus, Oppo, Vivo, etc. Falls back to standard battery settings if OEM settings unavailable. | No-op, returns `false`. Apple devices don't have OEM-specific battery settings. |
+| `getDeviceManufacturer()` | Returns `Build.MANUFACTURER` (lowercase), e.g., "xiaomi", "samsung", "google". | Returns `"Apple"`. |
+
+## When to use each API
+
+### Background audio/video playback
+
+<Tabs>
+  <Tab title="Android">
+    ```typescript
+    // Acquire wake lock before starting playback
+    await BackgroundGuardian.acquireWakeLock("AudioPlayer");
+    await audioPlayer.play();
+    
+    // Release when done
+    await BackgroundGuardian.releaseWakeLock();
+    ```
+  </Tab>
+  <Tab title="iOS">
+    ```typescript
+    // Configure audio session for background playback
+    // Wake locks are not needed on iOS
+    import { AudioSession } from 'react-native-audio-session';
+    await AudioSession.setCategory('playback');
+    await audioPlayer.play();
+    ```
+  </Tab>
+</Tabs>
+
+### Foreground-only screen keep-awake
+
+<Tabs>
+  <Tab title="Android">
+    ```typescript
+    // Keeps screen on while app is visible
+    await BackgroundGuardian.enableScreenWakeLock();
+    ```
+  </Tab>
+  <Tab title="iOS">
+    ```typescript
+    // Also keeps screen on while app is visible
+    await BackgroundGuardian.enableScreenWakeLock();
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Both platforms support screen wake locks with the same API. This is one of the few methods that has meaningful behavior on both platforms.
+</Note>
+
+### Background location tracking
+
+<Tabs>
+  <Tab title="Android">
+    ```typescript
+    // Check and request battery exemption
+    const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    if (!isIgnoring) {
+      await BackgroundGuardian.requestBatteryOptimizationExemption();
+    }
+    
+    // Handle OEM-specific restrictions
+    const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+    if (["xiaomi", "huawei"].includes(manufacturer ?? "")) {
+      await BackgroundGuardian.openOEMSettings();
+    }
+    ```
+  </Tab>
+  <Tab title="iOS">
+    ```typescript
+    // Configure location permissions and background modes
+    // Battery optimization exemptions not needed
+    import Geolocation from '@react-native-community/geolocation';
+    Geolocation.watchPosition(callback, error, {
+      enableHighAccuracy: true,
+      distanceFilter: 10,
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Cross-platform best practices
+
+### Always check platform before showing UI
+
+```typescript
+import { Platform } from "react-native";
+import BackgroundGuardian from "react-native-background-guardian";
+
+function BatteryOptimizationScreen() {
+  if (Platform.OS !== "android") {
+    // Don't show battery optimization UI on iOS
+    return null;
+  }
+
+  return (
+    <View>
+      <Button
+        title="Request Battery Exemption"
+        onPress={() => BackgroundGuardian.requestBatteryOptimizationExemption()}
+      />
+    </View>
+  );
+}
+```
+
+### Safe to call on all platforms
+
+All methods are safe to call on both platforms. iOS will return appropriate default values:
+
+```typescript
+// This works on both platforms
+const isHeld = await BackgroundGuardian.isWakeLockHeld();
+// Android: true/false based on actual state
+// iOS: always false
+
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+// Android: "xiaomi", "samsung", etc.
+// iOS: "Apple"
+```
+
+### Handle platform-specific requirements separately
+
+```typescript
+import { Platform } from "react-native";
+
+async function setupBackgroundExecution() {
+  if (Platform.OS === "android") {
+    // Android: Handle battery optimizations and OEM settings
+    const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    if (!isIgnoring) {
+      await BackgroundGuardian.requestBatteryOptimizationExemption();
+    }
+    await BackgroundGuardian.acquireWakeLock("BackgroundTask");
+  } else {
+    // iOS: Configure Background Modes in Info.plist
+    // Use appropriate background APIs (background fetch, processing, etc.)
+  }
+}
+```

@@ -1,0 +1,145 @@
+---
+title: releaseWakeLock
+description: Release a previously acquired wake lock
+---
+
+## Overview
+
+Releases a previously acquired wake lock. This allows the Android system to suspend the CPU when idle. Always call this method when your background work is complete to preserve battery life.
+
+```typescript
+function releaseWakeLock(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if the wake lock was successfully released, `false` if no wake lock was held or release failed.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Releases the CPU wake lock if one is held. If no wake lock is held, returns `true` without error. Clears the internal wake lock reference. |
+| **iOS** | No-op that returns `true` immediately. |
+
+## Important Notes
+
+- **Always Release**: Call `releaseWakeLock()` after your background work is complete to avoid draining battery.
+- **Safe to Call**: It's safe to call this method even if no wake lock is held - it will return `true`.
+- **Use Finally Blocks**: Consider using `finally` blocks to ensure wake locks are always released.
+- **One-to-One Mapping**: Each `acquireWakeLock()` call should have a corresponding `releaseWakeLock()` call.
+
+## When to Call
+
+✅ **Do call** `releaseWakeLock()` when:
+- Background work is complete
+- An error occurs during background processing
+- The component unmounts
+- The app enters the background (if work is complete)
+
+❌ **Don't call** `releaseWakeLock()` when:
+- Background work is still ongoing
+- You haven't called `acquireWakeLock()` first
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+// Release wake lock after background work is done
+await acquireWakeLock('MyTask');
+await doBackgroundWork();
+
+const released = await releaseWakeLock();
+console.log('Wake lock released:', released);
+```
+
+### With Try-Finally
+
+```typescript
+import { acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+try {
+  await acquireWakeLock('DataSync');
+  await syncData();
+} finally {
+  // Ensures wake lock is always released
+  await releaseWakeLock();
+}
+```
+
+### In a React Component
+
+```typescript
+import { useEffect } from 'react';
+import { acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+function BackgroundTaskComponent() {
+  useEffect(() => {
+    let wakeLockAcquired = false;
+
+    const startTask = async () => {
+      const acquired = await acquireWakeLock('ComponentTask');
+      wakeLockAcquired = acquired;
+      
+      if (acquired) {
+        await performLongRunningTask();
+      }
+    };
+
+    startTask();
+
+    // Cleanup: release wake lock when component unmounts
+    return () => {
+      if (wakeLockAcquired) {
+        releaseWakeLock();
+      }
+    };
+  }, []);
+
+  return <View>{/* ... */}</View>;
+}
+```
+
+### With Error Handling
+
+```typescript
+try {
+  await acquireWakeLock('Upload');
+  
+  try {
+    await uploadLargeFile();
+  } catch (error) {
+    console.error('Upload failed:', error);
+    // Still release wake lock on error
+  } finally {
+    await releaseWakeLock();
+  }
+} catch (error) {
+  console.error('Failed to acquire wake lock:', error);
+}
+```
+
+### Checking Before Release
+
+```typescript
+import { isWakeLockHeld, releaseWakeLock } from 'react-native-background-guardian';
+
+const isHeld = await isWakeLockHeld();
+
+if (isHeld) {
+  await releaseWakeLock();
+  console.log('Wake lock was released');
+} else {
+  console.log('No wake lock to release');
+}
+```
+
+## Related APIs
+
+- [`acquireWakeLock()`](/api/acquire-wake-lock) - Acquire a wake lock
+- [`isWakeLockHeld()`](/api/is-wake-lock-held) - Check if wake lock is held

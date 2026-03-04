@@ -1,0 +1,281 @@
+---
+title: Doze and App Standby
+description: Understanding Android's power-saving features and how they affect background execution
+---
+
+Android has two complementary power-saving features that extend battery life by managing how apps behave when the device isn't connected to a power source: **Doze mode** and **App Standby**.
+
+## What is Doze mode?
+
+Doze mode is a system-level power management feature introduced in Android 6.0 (API 23) that reduces battery consumption by deferring background CPU and network activity when the device is unused for long periods.
+
+### Doze activation conditions
+
+Doze mode activates when all of the following conditions are met:
+
+- Device is **unplugged** from power
+- Screen has been **off** for a period of time
+- Device is **stationary** (no movement detected)
+
+Once these conditions are met, the system gradually enters deeper states of Doze mode, with increasingly aggressive power restrictions.
+
+<Info>
+You can check if your app is currently running during Doze mode using `isDeviceIdleMode()`:
+
+```typescript
+const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+if (isIdle) {
+  console.log('App is running during a Doze maintenance window');
+}
+```
+</Info>
+
+### Restrictions during Doze mode
+
+When the device enters Doze mode, the system imposes the following restrictions:
+
+- **Network access is suspended** - All network connections are blocked
+- **Wake locks are ignored** - Partial wake locks do not prevent CPU from sleeping (except during maintenance windows)
+- **Alarms are deferred** - Standard AlarmManager alarms are postponed to the next maintenance window
+- **Wi-Fi scans are stopped** - Background Wi-Fi scanning is disabled
+- **Sync adapters don't run** - SyncAdapter synchronization is deferred
+- **JobScheduler jobs are deferred** - Scheduled jobs are postponed
+
+<Warning>
+Even if you acquire a wake lock using `acquireWakeLock()`, it will be ignored during Doze mode unless your app is exempt from battery optimizations.
+</Warning>
+
+## What is App Standby?
+
+App Standby is a complementary feature that defers background network activity for apps that the user hasn't recently interacted with. Unlike Doze mode, App Standby doesn't require the device to be stationary.
+
+### App Standby activation
+
+An app enters App Standby when:
+
+- The user hasn't explicitly launched the app for a certain period
+- The app doesn't have any foreground services or activities
+- The app doesn't generate user-visible notifications
+
+When an app is in standby, the system defers its network activity and background jobs until the device is plugged in or the user interacts with the app.
+
+## Maintenance windows
+
+While in Doze mode, the system periodically provides brief **maintenance windows** where restricted activities are allowed. During these windows:
+
+- The system processes deferred alarms, jobs, and syncs
+- Apps can access the network
+- Wake locks function normally
+
+Maintenance windows occur:
+- Initially after ~1 hour of Doze mode
+- Less frequently as Doze mode deepens (up to every 6 hours in deep Doze)
+
+```typescript
+// Check if device is in Doze and plan accordingly
+const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+
+if (isIdle) {
+  // We're in Doze mode - execution may be limited to maintenance windows
+  console.log('Running during maintenance window');
+} else {
+  // Normal execution - no Doze restrictions
+  console.log('Device is active');
+}
+```
+
+## How battery optimization exemptions work
+
+Apps that are exempt from battery optimizations receive special treatment during Doze mode:
+
+<div className="grid grid-cols-2 gap-4 my-4">
+  <div>
+    <h3 className="text-lg font-semibold mb-2">Without exemption</h3>
+    <ul className="space-y-1 text-sm">
+      <li>❌ Network access blocked</li>
+      <li>❌ Wake locks ignored</li>
+      <li>❌ Alarms deferred</li>
+      <li>❌ Jobs postponed</li>
+    </ul>
+  </div>
+  <div>
+    <h3 className="text-lg font-semibold mb-2">With exemption</h3>
+    <ul className="space-y-1 text-sm">
+      <li>✅ Network access maintained</li>
+      <li>✅ Wake locks respected</li>
+      <li>✅ Limited alarm deferral</li>
+      <li>✅ Some background execution</li>
+    </ul>
+  </div>
+</div>
+
+### Checking exemption status
+
+Always check if your app is already exempt before requesting exemption:
+
+```typescript
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+
+if (!isIgnoring) {
+  // App is subject to Doze restrictions
+  // Consider requesting exemption
+  await BackgroundGuardian.requestBatteryOptimizationExemption();
+}
+```
+
+<Note>
+On Android versions below 6.0 (API 23), `isIgnoringBatteryOptimizations()` always returns `true` because Doze mode doesn't exist on those versions.
+</Note>
+
+## Testing Doze mode behavior
+
+You can force your device into Doze mode using ADB to test how your app behaves:
+
+### Force device into Doze
+
+```bash
+# 1. Connect device via USB with ADB enabled
+adb shell dumpsys battery unplug
+
+# 2. Force device into idle mode
+adb shell dumpsys deviceidle force-idle
+
+# 3. Verify Doze mode is active
+adb shell dumpsys deviceidle get deep
+```
+
+Your app can detect this state:
+
+```typescript
+const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+console.log('Device is in Doze mode:', isIdle);
+```
+
+### Exit Doze mode
+
+```bash
+# Return device to normal state
+adb shell dumpsys deviceidle unforce
+adb shell dumpsys battery reset
+```
+
+### Step through Doze states
+
+You can manually step through Doze mode states to observe behavior:
+
+```bash
+# Enter progressively deeper Doze states
+adb shell dumpsys deviceidle step deep
+
+# Watch logs to see your app's behavior
+adb logcat | grep "BackgroundGuardian"
+```
+
+## Best practices for Doze compatibility
+
+### 1. Use appropriate exemptions judiciously
+
+Only request battery optimization exemptions if your app genuinely needs continuous background execution:
+
+```typescript
+async function setupBackgroundExecution() {
+  // Check current status
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    // Only request if your use case justifies it
+    await BackgroundGuardian.requestBatteryOptimizationExemption();
+  }
+}
+```
+
+<Warning>
+Google Play has strict policies about which apps can request battery optimization exemptions. See the [Battery Optimization](/concepts/battery-optimization) page for acceptable use cases.
+</Warning>
+
+### 2. Combine with foreground services
+
+For continuous long-running tasks, use a foreground service along with wake locks:
+
+```typescript
+// Start your foreground service (using another library)
+startForegroundService();
+
+// Then acquire wake lock for CPU execution
+await BackgroundGuardian.acquireWakeLock('MusicPlayback');
+```
+
+Foreground services prevent your app from being considered "idle" and entering App Standby.
+
+### 3. Handle maintenance windows gracefully
+
+If your app isn't exempt, design it to work efficiently during maintenance windows:
+
+```typescript
+async function performBackgroundSync() {
+  const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+  
+  if (isIdle) {
+    // We're in a maintenance window - work quickly
+    await quickSync();
+  } else {
+    // Normal operation - more time available
+    await fullSync();
+  }
+}
+```
+
+### 4. Respond to power state changes
+
+Monitor when the device enters or exits Doze mode:
+
+```typescript
+import { AppState, NativeEventEmitter, NativeModules } from 'react-native';
+
+// Check status when app becomes active
+AppState.addEventListener('change', async (state) => {
+  if (state === 'active') {
+    const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+    const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+    
+    if (isIdle || isPowerSave) {
+      // Adjust app behavior for power restrictions
+      reducePowerConsumption();
+    }
+  }
+});
+```
+
+## Doze vs Power Save mode
+
+It's important to understand the difference between Doze mode and Power Save (Battery Saver) mode:
+
+| Feature | Doze Mode | Power Save Mode |
+|---------|-----------|------------------|
+| **Trigger** | Device stationary, screen off | User manually enables or automatic at low battery |
+| **Scope** | Affects apps without exemptions | Affects ALL apps system-wide |
+| **Network** | Suspended (except maintenance windows) | Throttled for all apps |
+| **Wake locks** | Ignored (except with exemption) | Limited effectiveness |
+| **Exemption** | Per-app via battery optimization settings | No per-app exemption |
+
+<Tip>
+Even if your app is exempt from battery optimizations (Doze mode), it will still be affected by Power Save mode when enabled. Always check both:
+
+```typescript
+const isIgnoringOptimization = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+
+if (isPowerSave) {
+  Alert.alert(
+    'Battery Saver Active',
+    'Background features may be limited even though the app is exempt from Doze mode.'
+  );
+}
+```
+</Tip>
+
+## Related topics
+
+- [Battery Optimization](/concepts/battery-optimization) - Learn about exemption policies and best practices
+- [OEM Restrictions](/concepts/oem-restrictions) - Understand manufacturer-specific battery management
+- [Wake Locks](/concepts/wake-locks) - Keep the CPU running during critical tasks

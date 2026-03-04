@@ -1,0 +1,96 @@
+---
+title: Installation
+description: Install React Native Background Guardian in your React Native project with npm, yarn, or pnpm.
+---
+
+## Install the package
+
+Install the library using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install react-native-background-guardian
+```
+
+```bash yarn
+yarn add react-native-background-guardian
+```
+
+```bash pnpm
+pnpm add react-native-background-guardian
+```
+
+</CodeGroup>
+
+## iOS setup
+
+For iOS projects, install the native dependencies using CocoaPods:
+
+```bash
+cd ios && pod install
+```
+
+<Note>
+  On iOS, all library methods are no-ops that return safe default values. iOS handles background execution differently through Background Modes, so no additional configuration is needed.
+</Note>
+
+## Android setup
+
+No additional setup is required for Android. The necessary permissions are automatically merged into your app's manifest:
+
+```xml
+<!-- Required for Wake Lock functionality -->
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+
+<!-- Required for requesting battery optimization exemption -->
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+```
+
+<Warning>
+  The `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission is restricted by Google Play. Your app must fall into specific acceptable use cases (messaging, health tracking, task automation, etc.) to use this permission. See the [Introduction](/introduction) page for the full list of acceptable use cases.
+</Warning>
+
+## Verify installation
+
+After installation, verify that the library is working by importing it in your code:
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+
+// Check if the module is available
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+console.log('Device manufacturer:', manufacturer);
+```
+
+## Rebuild your app
+
+After installing the library, rebuild your app to ensure native modules are linked properly:
+
+<CodeGroup>
+
+```bash Android
+npx react-native run-android
+```
+
+```bash iOS
+npx react-native run-ios
+```
+
+</CodeGroup>
+
+<Tip>
+  If you encounter any issues during installation, try cleaning your build:
+  
+  **Android:** `cd android && ./gradlew clean`
+  
+  **iOS:** `cd ios && rm -rf build && pod install`
+</Tip>
+
+## TypeScript support
+
+The library includes full TypeScript type definitions out of the box. No additional @types packages are needed.
+
+## New Architecture support
+
+React Native Background Guardian is built as a Turbo Module and fully supports React Native's New Architecture. No special configuration is required.

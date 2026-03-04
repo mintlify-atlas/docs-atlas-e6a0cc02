@@ -1,0 +1,378 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for React Native Background Guardian
+---
+
+## Wake lock not working
+
+### Issue: Wake lock appears to be acquired but background tasks still stop
+
+**Possible causes:**
+
+1. **Testing on emulator instead of real device**
+   - Emulators may not accurately simulate Doze mode and power management
+   - Always test wake lock functionality on physical devices
+
+2. **Wake lock timeout expired**
+   - Default timeout is 24 hours (86,400,000 ms)
+   - Wake lock is automatically released after timeout to prevent battery drain
+   
+   ```typescript
+   // Extend timeout if needed
+   await BackgroundGuardian.acquireWakeLock(
+     "LongRunningTask",
+     48 * 60 * 60 * 1000 // 48 hours
+   );
+   ```
+
+3. **Wake lock not actually acquired**
+   - Check return value from `acquireWakeLock()`
+   
+   ```typescript
+   const acquired = await BackgroundGuardian.acquireWakeLock("MyTask");
+   if (!acquired) {
+     console.error('Failed to acquire wake lock');
+   }
+   ```
+
+**Solution:**
+
+Verify the wake lock is held using ADB:
+
+```bash
+adb shell dumpsys power | grep "BackgroundGuardian"
+```
+
+Expected output:
+```
+PARTIAL_WAKE_LOCK 'BackgroundGuardian' (uid=10123, pid=12345)
+```
+
+If the wake lock is not shown:
+- Check if the app has `WAKE_LOCK` permission
+- Verify `acquireWakeLock()` returned `true`
+- Ensure the app wasn't force-stopped by the user
+
+### Issue: Wake lock released too early
+
+**Common causes:**
+
+1. **Multiple calls to `releaseWakeLock()`**
+   - Each `acquireWakeLock()` call should have exactly one matching `releaseWakeLock()` call
+   
+2. **App crashed or was killed**
+   - Wake locks are automatically released if the app process is killed
+   
+3. **Battery optimization killed the app**
+   - Device is not exempt from battery optimizations
+   - See [Battery optimization not updating](#battery-optimization-status-not-updating)
+
+**Solution:**
+
+Add logging to track wake lock lifecycle:
+
+```typescript
+let wakeLockCounter = 0;
+
+async function acquireWakeLockDebug(tag: string) {
+  const acquired = await BackgroundGuardian.acquireWakeLock(tag);
+  if (acquired) {
+    wakeLockCounter++;
+    console.log(`[${tag}] Wake lock acquired (count: ${wakeLockCounter})`);
+  }
+  return acquired;
+}
+
+async function releaseWakeLockDebug() {
+  const released = await BackgroundGuardian.releaseWakeLock();
+  if (released) {
+    wakeLockCounter--;
+    console.log(`Wake lock released (count: ${wakeLockCounter})`);
+  }
+  return released;
+}
+```
+
+<Warning>
+  Always call `releaseWakeLock()` when background work is complete. Failing to release wake locks will drain the device battery and may cause your app to be flagged by users.
+</Warning>
+
+## Battery optimization status not updating
+
+### Issue: App shows as not exempt even after user grants exemption
+
+After the user accepts or rejects the battery optimization dialog, the app is taken to the system settings. The status won't update until the app returns to the foreground.
+
+**Solution:**
+
+Use `AppState` to refresh status when app becomes active:
+
+```typescript
+import { useEffect } from "react";
+import { AppState } from "react-native";
+import BackgroundGuardian from "react-native-background-guardian";
+
+function useBatteryOptimizationStatus() {
+  const [isIgnoring, setIsIgnoring] = useState(false);
+  
+  const refreshStatus = async () => {
+    const status = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    setIsIgnoring(status);
+  };
+  
+  useEffect(() => {
+    refreshStatus();
+    
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        refreshStatus();
+      }
+    });
+    
+    return () => subscription.remove();
+  }, []);
+  
+  return isIgnoring;
+}
+```
+
+### Issue: Exemption granted but app still killed in background
+
+Battery optimization exemption only covers Doze mode. Other factors can still kill your app:
+
+1. **Power Save mode is enabled**
+   - Affects ALL apps regardless of exemptions
+   - Check with `isPowerSaveMode()` and prompt user to disable it
+   
+   ```typescript
+   const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+   if (isPowerSave) {
+     Alert.alert(
+       "Battery Saver Active",
+       "Disable Battery Saver for reliable background operation.",
+       [{ 
+         text: "Open Settings", 
+         onPress: () => BackgroundGuardian.openPowerSaveModeSettings() 
+       }]
+     );
+   }
+   ```
+
+2. **OEM-specific battery optimization not disabled**
+   - Xiaomi, Huawei, Samsung, etc. have additional battery savers
+   - See [OEM settings not opening](#oem-settings-not-opening)
+
+3. **App Standby restrictions**
+   - Use a Foreground Service for continuous operation
+   - Consider libraries like `react-native-background-actions`
+
+<Note>
+  Battery optimization exemption alone is often not enough on devices from Xiaomi, Huawei, Oppo, Vivo, and OnePlus. Always check for OEM-specific settings.
+</Note>
+
+## OEM settings not opening
+
+### Issue: `openOEMSettings()` returns `false` or opens wrong page
+
+Some OEM activities may not exist on all device variants or OS versions. The library attempts to open multiple activities per manufacturer and falls back gracefully.
+
+**Solution:**
+
+1. **Check device manufacturer**
+   ```typescript
+   const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+   console.log('Manufacturer:', manufacturer);
+   ```
+
+2. **Test fallback behavior**
+   ```typescript
+   const opened = await BackgroundGuardian.openOEMSettings();
+   if (!opened) {
+     console.log('No OEM settings found, opening standard settings');
+     await BackgroundGuardian.openBatteryOptimizationSettings();
+   }
+   ```
+
+3. **Manual instructions for unsupported devices**
+   ```typescript
+   const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+   
+   function getManualInstructions(mfr: string | null) {
+     switch (mfr?.toLowerCase()) {
+       case 'xiaomi':
+         return 'Go to Settings → Apps → Manage apps → [Your App] → Battery saver → No restrictions';
+       case 'samsung':
+         return 'Go to Settings → Apps → [Your App] → Battery → Optimize battery usage → All → [Your App] → Disable';
+       case 'huawei':
+         return 'Go to Settings → Battery → App launch → [Your App] → Manage manually';
+       default:
+         return 'Go to Settings → Battery → Battery optimization → [Your App] → Don\'t optimize';
+     }
+   }
+   
+   Alert.alert(
+     'Manual Setup Required',
+     getManualInstructions(manufacturer)
+   );
+   ```
+
+### Supported OEM manufacturers
+
+| Manufacturer | Status | Notes |
+|--------------|--------|-------|
+| Xiaomi (MIUI) | ✅ Supported | Multiple fallback activities |
+| Samsung (OneUI) | ✅ Supported | Works on most variants |
+| Huawei (EMUI) | ✅ Supported | May vary by EMUI version |
+| Honor (Magic UI) | ✅ Supported | Uses Huawei settings |
+| Oppo (ColorOS) | ✅ Supported | Settings path may differ |
+| Vivo (FuntouchOS) | ✅ Supported | Settings path may differ |
+| OnePlus (OxygenOS) | ✅ Supported | Similar to Oppo |
+| Realme (Realme UI) | ✅ Supported | Similar to Oppo |
+| Other | ⚡ Fallback | Opens standard battery settings |
+
+<Warning>
+  OEM manufacturers frequently change their system app package names and activity paths between OS versions. If `openOEMSettings()` doesn't work on a specific device variant, provide manual instructions to users.
+</Warning>
+
+## Google Play policy considerations
+
+### Issue: App rejected for using `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+
+Google Play restricts use of the `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission to specific app categories.
+
+**Acceptable use cases:**
+
+| App Type | Description |
+|----------|-------------|
+| Chat / Voice / Video | Apps needing real-time messaging where FCM High Priority is insufficient |
+| Task Automation | Apps that schedule automated actions (macros) |
+| Health / Fitness | Tracking workouts, often combined with Foreground Service |
+| Device Connection | Companion apps for smartwatches, IoT devices, etc. |
+| Safety | Apps for personal safety (SOS) |
+| VPN / Proxy | Network tools |
+
+**Solution:**
+
+If your app doesn't fit these categories:
+
+1. **Remove the permission from AndroidManifest.xml**
+   ```xml
+   <!-- Remove this permission -->
+   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+   ```
+
+2. **Use `openBatteryOptimizationSettings()` instead**
+   ```typescript
+   // Safe for all apps - no permission required
+   await BackgroundGuardian.openBatteryOptimizationSettings();
+   ```
+   
+   This opens the system list where users can manually select "Don't optimize" for your app. It requires more user steps but doesn't require special permissions.
+
+3. **Update your app's Play Store listing**
+   - Clearly explain why your app needs background execution
+   - Provide screenshots of the exemption process
+   - Document legitimate use cases
+
+<Note>
+  `openBatteryOptimizationSettings()` doesn't require the `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission and is safe to use in all apps.
+</Note>
+
+### Issue: Play Store warning about battery drain
+
+If Google Play flags your app for excessive battery usage:
+
+1. **Always release wake locks when done**
+   ```typescript
+   try {
+     await BackgroundGuardian.acquireWakeLock("Task");
+     await doWork();
+   } finally {
+     // Ensure release even if error occurs
+     await BackgroundGuardian.releaseWakeLock();
+   }
+   ```
+
+2. **Use appropriate timeouts**
+   ```typescript
+   // Don't use excessive timeouts
+   await BackgroundGuardian.acquireWakeLock(
+     "ShortTask",
+     10 * 60 * 1000 // 10 minutes, not 24 hours
+   );
+   ```
+
+3. **Consider Foreground Services**
+   - Shows persistent notification
+   - Signals to user and system that app is active
+   - Better user experience than invisible background execution
+
+## Platform-specific issues
+
+### Android version compatibility
+
+**Android < 6.0 (API 23)**
+- Battery optimization APIs not available
+- Methods return safe defaults
+- Wake locks still work
+
+**Android 6.0 - 8.1 (API 23-27)**
+- Basic Doze mode support
+- App Standby restrictions
+- Battery optimization exemptions work
+
+**Android 9+ (API 28+)**
+- Enhanced battery optimization
+- Stricter background execution limits
+- App Standby buckets
+
+### iOS limitations
+
+All methods are no-ops on iOS that return safe default values:
+
+```typescript
+// iOS always returns these values:
+await acquireWakeLock(); // true
+await releaseWakeLock(); // true
+await isWakeLockHeld(); // false
+await isIgnoringBatteryOptimizations(); // true
+await getDeviceManufacturer(); // "Apple"
+```
+
+iOS handles background execution through:
+- Background Modes (audio, location, fetch, etc.)
+- Push notifications
+- Background App Refresh
+- Silent push notifications
+
+<Note>
+  Configure appropriate Background Modes in your iOS app's Info.plist instead of using wake locks.
+</Note>
+
+## Getting help
+
+If you encounter issues not covered here:
+
+1. **Enable verbose logging**
+   ```typescript
+   // Add detailed logging
+   const result = await BackgroundGuardian.acquireWakeLock("Debug");
+   console.log('Wake lock result:', result);
+   
+   const isHeld = await BackgroundGuardian.isWakeLockHeld();
+   console.log('Wake lock held:', isHeld);
+   ```
+
+2. **Check ADB logs**
+   ```bash
+   adb logcat | grep BackgroundGuardian
+   ```
+
+3. **Test on multiple devices**
+   - Different manufacturers behave differently
+   - Test on Xiaomi, Samsung, and stock Android if possible
+
+4. **Report issues**
+   - Include device manufacturer and OS version
+   - Provide ADB logs
+   - Describe steps to reproduce

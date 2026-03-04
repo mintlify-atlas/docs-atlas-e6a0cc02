@@ -1,0 +1,187 @@
+---
+title: enableScreenWakeLock
+description: Keep the display on while the app is in the foreground
+---
+
+## Overview
+
+Enables a screen wake lock to keep the display on while the app is in the foreground. This is different from CPU wake locks and does NOT keep background tasks running.
+
+```typescript
+function enableScreenWakeLock(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if the screen wake lock was enabled, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Sets `FLAG_KEEP_SCREEN_ON` on the current Activity window. The screen stays on only while the app is visible. |
+| **iOS** | Disables the idle timer (`UIApplication.shared.isIdleTimerDisabled = true`). The screen stays on while the app is active. |
+
+## Important Notes
+
+- **Foreground Only**: This keeps the screen awake only while the app is in the foreground. It does NOT replace [`acquireWakeLock()`](/api/acquire-wake-lock) for background CPU execution.
+- **Activity Required**: On Android, this requires a current Activity. Returns `false` if no Activity is available.
+- **Battery Impact**: Keeping the screen on consumes significant battery. Use sparingly and only when necessary.
+- **Automatic Cleanup**: The system automatically clears this when the Activity is destroyed.
+
+## Use Cases
+
+✅ **Good use cases**:
+- Video playback
+- Navigation/maps display
+- Reading/viewing content
+- Live monitoring dashboards
+- Camera preview screens
+
+❌ **Not suitable for**:
+- Background task execution (use `acquireWakeLock()` instead)
+- When the app is in the background
+- Battery-sensitive scenarios
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+const enabled = await enableScreenWakeLock();
+if (enabled) {
+  console.log('Screen will stay on');
+}
+
+// Later, when done
+await disableScreenWakeLock();
+```
+
+### Video Player Component
+
+```typescript
+import { useEffect } from 'react';
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+import Video from 'react-native-video';
+
+function VideoPlayer({ videoUrl }) {
+  useEffect(() => {
+    // Enable screen wake lock when video player mounts
+    enableScreenWakeLock();
+
+    // Disable when player unmounts
+    return () => {
+      disableScreenWakeLock();
+    };
+  }, []);
+
+  return (
+    <Video
+      source={{ uri: videoUrl }}
+      style={{ width: '100%', height: 300 }}
+      resizeMode="contain"
+    />
+  );
+}
+```
+
+### Navigation Screen
+
+```typescript
+import { useFocusEffect } from '@react-navigation/native';
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+function NavigationScreen() {
+  // Enable when screen is focused, disable when unfocused
+  useFocusEffect(
+    useCallback(() => {
+      enableScreenWakeLock();
+
+      return () => {
+        disableScreenWakeLock();
+      };
+    }, [])
+  );
+
+  return (
+    <MapView /* ... */ />
+  );
+}
+```
+
+### Conditional Screen Lock
+
+```typescript
+import { useState } from 'react';
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+function ReadingScreen() {
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
+
+  const toggleScreenLock = async () => {
+    if (keepScreenOn) {
+      await disableScreenWakeLock();
+      setKeepScreenOn(false);
+    } else {
+      const enabled = await enableScreenWakeLock();
+      setKeepScreenOn(enabled);
+    }
+  };
+
+  return (
+    <View>
+      <Switch
+        value={keepScreenOn}
+        onValueChange={toggleScreenLock}
+      />
+      <Text>Keep Screen On</Text>
+      {/* Reading content */}
+    </View>
+  );
+}
+```
+
+### With Error Handling
+
+```typescript
+import { enableScreenWakeLock, disableScreenWakeLock } from 'react-native-background-guardian';
+
+const startPresentation = async () => {
+  const enabled = await enableScreenWakeLock();
+  
+  if (!enabled) {
+    Alert.alert(
+      'Warning',
+      'Could not keep screen on. The screen may turn off during presentation.'
+    );
+    return;
+  }
+
+  // Show presentation
+  showPresentationSlides();
+};
+
+const endPresentation = async () => {
+  await disableScreenWakeLock();
+  console.log('Screen lock released');
+};
+```
+
+## Comparison with CPU Wake Lock
+
+| Feature | `enableScreenWakeLock()` | `acquireWakeLock()` |
+|---------|-------------------------|--------------------|
+| **Purpose** | Keep screen on | Keep CPU running |
+| **Works when** | App is visible | Background + foreground |
+| **Battery impact** | High (screen on) | Medium (CPU running) |
+| **Use for** | User-facing content | Background processing |
+| **iOS support** | Yes (idle timer) | No (not applicable) |
+
+## Related APIs
+
+- [`disableScreenWakeLock()`](/api/disable-screen-wake-lock) - Allow screen to turn off
+- [`acquireWakeLock()`](/api/acquire-wake-lock) - Keep CPU running (different purpose)

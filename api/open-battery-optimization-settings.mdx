@@ -1,0 +1,259 @@
+---
+title: openBatteryOptimizationSettings
+description: Open the system battery optimization settings list
+---
+
+## Overview
+
+Opens the system battery optimization settings list where users can manually toggle battery optimization for specific apps. This is a safer alternative to [`requestBatteryOptimizationExemption()`](/api/request-battery-optimization-exemption) as it doesn't require special permissions.
+
+```typescript
+function openBatteryOptimizationSettings(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if settings were successfully opened, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Opens `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`, showing the list of all apps with their battery optimization status. Available on API 23+ (Android 6.0+). |
+| **iOS** | No-op that returns `false` immediately. |
+
+## Advantages Over Direct Request
+
+| Feature | `openBatteryOptimizationSettings()` | `requestBatteryOptimizationExemption()` |
+|---------|-------------------------------------|------------------------------------------|
+| **Permission** | None required | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` |
+| **Google Play Policy** | ✅ Fully compliant | ⚠️ Restricted use cases |
+| **User Action** | Find app in list, toggle | Single tap to allow |
+| **Rejection Risk** | None | High if misused |
+
+## When to Use
+
+✅ **Use this method when**:
+- You want to avoid Google Play policy concerns
+- Your app doesn't strictly require background execution
+- You prefer a more conservative approach
+- You want to let users control the setting manually
+
+❌ **Consider `requestBatteryOptimizationExemption()` when**:
+- Your app genuinely requires background execution
+- You meet Google Play's acceptable use cases
+- You want a simpler user experience
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { openBatteryOptimizationSettings } from 'react-native-background-guardian';
+
+const opened = await openBatteryOptimizationSettings();
+
+if (opened) {
+  console.log('Battery optimization settings opened');
+} else {
+  console.log('Could not open settings');
+}
+```
+
+### With User Guidance
+
+```typescript
+import { Alert } from 'react-native';
+import { openBatteryOptimizationSettings } from 'react-native-background-guardian';
+
+function showBatteryOptimizationGuide() {
+  Alert.alert(
+    'Enable Background Access',
+    'For the best experience, disable battery optimization for this app:\n\n' +
+    '1. Find "' + APP_NAME + '" in the list\n' +
+    '2. Tap on it\n' +
+    '3. Select "Don\'t optimize"',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Open Settings',
+        onPress: async () => {
+          await openBatteryOptimizationSettings();
+        }
+      }
+    ]
+  );
+}
+```
+
+### Settings Screen
+
+```typescript
+import { useState, useEffect } from 'react';
+import { 
+  isIgnoringBatteryOptimizations, 
+  openBatteryOptimizationSettings 
+} from 'react-native-background-guardian';
+
+function BatterySettingsScreen() {
+  const [isIgnoring, setIsIgnoring] = useState(false);
+
+  const checkStatus = async () => {
+    const status = await isIgnoringBatteryOptimizations();
+    setIsIgnoring(status);
+  };
+
+  useEffect(() => {
+    checkStatus();
+    
+    // Re-check when app comes to foreground
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View>
+      <Text>Battery Optimization</Text>
+      <Text>
+        Status: {isIgnoring ? '✓ Disabled (Good)' : '✗ Enabled'}
+      </Text>
+      
+      {!isIgnoring && (
+        <View>
+          <Text style={{ color: 'orange' }}>
+            Battery optimization may limit background functionality.
+          </Text>
+          <Button 
+            title="Open Settings" 
+            onPress={openBatteryOptimizationSettings}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Onboarding Flow
+
+```typescript
+import { openBatteryOptimizationSettings } from 'react-native-background-guardian';
+
+function OnboardingBatteryScreen({ navigation }) {
+  return (
+    <View>
+      <Text>Step 3: Battery Settings</Text>
+      <Image source={require('./battery-settings-screenshot.png')} />
+      <Text>
+        To ensure reliable background operation:
+      </Text>
+      <Text>1. Open battery settings</Text>
+      <Text>2. Find "{APP_NAME}"</Text>
+      <Text>3. Select "Don't optimize"</Text>
+      
+      <Button 
+        title="Open Settings"
+        onPress={async () => {
+          await openBatteryOptimizationSettings();
+        }}
+      />
+      <Button 
+        title="Skip"
+        onPress={() => navigation.navigate('Home')}
+      />
+    </View>
+  );
+}
+```
+
+### Check and Guide
+
+```typescript
+import { 
+  isIgnoringBatteryOptimizations, 
+  openBatteryOptimizationSettings 
+} from 'react-native-background-guardian';
+
+async function checkAndGuideBatterySettings() {
+  const isIgnoring = await isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    Alert.alert(
+      'Background Access',
+      'For reliable background sync, please disable battery optimization for this app.',
+      [
+        { text: 'Not Now', style: 'cancel' },
+        { 
+          text: 'Open Settings',
+          onPress: async () => {
+            const opened = await openBatteryOptimizationSettings();
+            
+            if (!opened) {
+              Alert.alert(
+                'Error',
+                'Could not open settings. Please open Settings > Apps > ' + APP_NAME + ' manually.'
+              );
+            }
+          }
+        }
+      ]
+    );
+  }
+}
+```
+
+### With Fallback
+
+```typescript
+import { 
+  openBatteryOptimizationSettings,
+  openOEMSettings 
+} from 'react-native-background-guardian';
+
+async function openBatterySettings() {
+  // Try to open battery optimization settings
+  const opened = await openBatteryOptimizationSettings();
+  
+  if (!opened) {
+    // Fallback to OEM settings
+    const oemOpened = await openOEMSettings();
+    
+    if (!oemOpened) {
+      Alert.alert(
+        'Error',
+        'Could not open battery settings. Please check Settings > Apps manually.'
+      );
+    }
+  }
+}
+```
+
+## User Instructions by Manufacturer
+
+Different manufacturers have slightly different UIs:
+
+### Stock Android / Google Pixel
+1. Find your app in the list
+2. Tap on it
+3. Select "Don't optimize"
+
+### Samsung
+1. Find your app
+2. Tap it
+3. Select "Don't optimize"
+
+### Xiaomi (MIUI)
+- Consider using [`openOEMSettings()`](/api/open-oem-settings) for better guidance
+
+## Related APIs
+
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check status
+- [`requestBatteryOptimizationExemption()`](/api/request-battery-optimization-exemption) - Direct request (alternative)
+- [`openOEMSettings()`](/api/open-oem-settings) - OEM-specific settings

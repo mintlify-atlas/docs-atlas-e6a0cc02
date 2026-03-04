@@ -1,0 +1,494 @@
+---
+title: Battery optimization
+description: Learn when and how to request battery optimization exemptions while complying with Google Play policies
+---
+
+Battery optimization exemptions allow your app to bypass Doze mode restrictions, enabling more reliable background execution. However, requesting exemptions requires careful consideration of both technical requirements and Google Play policies.
+
+## Understanding battery optimizations
+
+By default, all apps are subject to battery optimizations. This means:
+
+- The system restricts background execution during Doze mode
+- Network access is suspended when the device is idle
+- Wake locks may be ignored
+- Background jobs and alarms are deferred
+
+When an app is **exempt from battery optimizations** (also called "ignoring battery optimizations"), it can:
+
+- Access the network during Doze mode
+- Hold partial wake locks that remain effective
+- Execute background work more reliably
+- Receive alarms with less deferral
+
+<Info>
+Battery optimization exemptions were introduced in Android 6.0 (API 23) as part of the Doze mode feature. On earlier Android versions, these APIs are not available and all apps operate without such restrictions.
+</Info>
+
+## Checking exemption status
+
+Always check your app's current exemption status before requesting changes:
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+
+if (isIgnoring) {
+  console.log('App is exempt from battery optimizations');
+} else {
+  console.log('App is subject to battery optimization restrictions');
+}
+```
+
+The implementation checks this using the Android PowerManager:
+
+```kotlin
+// From BackgroundGuardianModule.kt:225-243
+val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+val packageName = context.packageName
+val isIgnoring = powerManager.isIgnoringBatteryOptimizations(packageName)
+```
+
+<Note>
+On iOS, `isIgnoringBatteryOptimizations()` always returns `true` as the concept doesn't apply in the same way. iOS handles background execution through Background Modes configured in Xcode.
+</Note>
+
+## Two methods for requesting exemptions
+
+There are two approaches to guide users toward granting battery optimization exemptions:
+
+### Method 1: Direct dialog (restricted)
+
+This method shows a direct "Allow" dialog to the user:
+
+```typescript
+const dialogShown = await BackgroundGuardian.requestBatteryOptimizationExemption();
+
+if (dialogShown) {
+  console.log('User was prompted for battery optimization exemption');
+}
+```
+
+**Pros:**
+- User-friendly - single tap to approve
+- Faster user experience
+
+**Cons:**
+- Requires `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission
+- Subject to strict Google Play policy restrictions
+- Can lead to app rejection if misused
+
+<Warning>
+**Google Play Policy Requirement:**
+
+This method uses `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, which requires the `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission. Google Play only allows this for specific app categories. See [Acceptable use cases](#acceptable-use-cases) below.
+</Warning>
+
+### Method 2: Settings list (safe)
+
+This method opens the system's battery optimization settings list:
+
+```typescript
+await BackgroundGuardian.openBatteryOptimizationSettings();
+```
+
+The user must then:
+1. Find your app in the list
+2. Tap on it
+3. Select "Don't optimize" or "Allow"
+
+**Pros:**
+- No special permissions required
+- Safe for all apps - no Google Play restrictions
+- No risk of policy violations
+
+**Cons:**
+- Requires more user steps
+- Some users may struggle to find the app in the list
+
+<Tip>
+For most apps, use Method 2 (`openBatteryOptimizationSettings`) to avoid potential Google Play policy issues. Only use Method 1 if your app clearly falls into an acceptable use case category.
+</Tip>
+
+## Acceptable use cases
+
+If you use `requestBatteryOptimizationExemption()`, your app **must** fall into one of these categories to comply with Google Play policies:
+
+<div className="space-y-4 my-6">
+  <div className="border-l-4 border-blue-500 pl-4">
+    <h3 className="font-semibold text-lg">Chat, voice, and video apps</h3>
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      Apps requiring real-time messaging or calls where Firebase Cloud Messaging (FCM) high-priority messages are insufficient.
+    </p>
+    <p className="text-sm mt-1">Examples: WhatsApp, Signal, Zoom</p>
+  </div>
+
+  <div className="border-l-4 border-green-500 pl-4">
+    <h3 className="font-semibold text-lg">Task automation</h3>
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      Apps that schedule and execute automated actions, macros, or workflows on behalf of the user.
+    </p>
+    <p className="text-sm mt-1">Examples: Tasker, IFTTT, automation tools</p>
+  </div>
+
+  <div className="border-l-4 border-red-500 pl-4">
+    <h3 className="font-semibold text-lg">Health and fitness tracking</h3>
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      Apps that continuously track health metrics, workouts, or activity data in the background.
+    </p>
+    <p className="text-sm mt-1">Examples: Strava, MyFitnessPal, continuous glucose monitors</p>
+  </div>
+
+  <div className="border-l-4 border-purple-500 pl-4">
+    <h3 className="font-semibold text-lg">Device connection and companion apps</h3>
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      Apps that maintain persistent connections to external devices like smartwatches, IoT devices, or medical equipment.
+    </p>
+    <p className="text-sm mt-1">Examples: Wear OS companion app, smart home controllers</p>
+  </div>
+
+  <div className="border-l-4 border-yellow-500 pl-4">
+    <h3 className="font-semibold text-lg">Personal safety apps</h3>
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      Apps providing emergency services, SOS features, or location tracking for personal safety.
+    </p>
+    <p className="text-sm mt-1">Examples: Life360, emergency alert systems</p>
+  </div>
+
+  <div className="border-l-4 border-indigo-500 pl-4">
+    <h3 className="font-semibold text-lg">VPN and network tools</h3>
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      Apps that provide VPN services, proxies, or require persistent network connections.
+    </p>
+    <p className="text-sm mt-1">Examples: NordVPN, network monitoring tools</p>
+  </div>
+</div>
+
+<Warning>
+**If your app does not fit these categories**, do not use `requestBatteryOptimizationExemption()`. Instead, use `openBatteryOptimizationSettings()` and instruct the user to manually grant the exemption.
+
+Violating Google Play policies can result in:
+- App removal from the Play Store
+- Developer account suspension
+- Loss of user trust
+</Warning>
+
+## Implementation guide
+
+### Complete exemption request flow
+
+Here's a complete implementation that checks status, requests exemption, and handles the result:
+
+```typescript
+import { useEffect, useState } from 'react';
+import { AppState, Alert } from 'react-native';
+import BackgroundGuardian from 'react-native-background-guardian';
+
+export function useBatteryOptimization() {
+  const [isIgnoring, setIsIgnoring] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const checkStatus = async () => {
+    const status = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    setIsIgnoring(status);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    checkStatus();
+
+    // Refresh status when app comes to foreground
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  const requestExemption = async () => {
+    if (isIgnoring) {
+      Alert.alert(
+        'Already Optimized',
+        'Your app is already exempt from battery optimizations.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Battery Optimization',
+      'To ensure reliable background operation, please allow this app to run in the background.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: async () => {
+            // Use the safe method for most apps
+            await BackgroundGuardian.openBatteryOptimizationSettings();
+          },
+        },
+      ]
+    );
+  };
+
+  return {
+    isIgnoring,
+    isLoading,
+    requestExemption,
+    checkStatus,
+  };
+}
+```
+
+### For apps with acceptable use cases
+
+If your app qualifies for the direct dialog method:
+
+```typescript
+const requestExemption = async () => {
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (isIgnoring) {
+    return true; // Already exempt
+  }
+
+  // Show explanation first
+  Alert.alert(
+    'Background Access Required',
+    'This app needs to run in the background to deliver real-time messages. ' +
+    'Please allow battery optimization exemption in the next dialog.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Continue',
+        onPress: async () => {
+          // Use direct dialog for qualifying apps
+          const shown = await BackgroundGuardian.requestBatteryOptimizationExemption();
+          
+          if (!shown) {
+            // Fallback to settings list if dialog fails
+            await BackgroundGuardian.openBatteryOptimizationSettings();
+          }
+        },
+      },
+    ]
+  );
+};
+```
+
+## Permissions required
+
+The library automatically includes the necessary permission in its Android manifest:
+
+```xml
+<!-- From the library's AndroidManifest.xml -->
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+```
+
+This permission is automatically merged into your app's manifest during the build process. No additional configuration is needed.
+
+<Note>
+The `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission is **not** a runtime permission and doesn't require user approval. However, its usage is monitored by Google Play's policy enforcement.
+</Note>
+
+## Testing exemption behavior
+
+You can verify that battery optimization exemptions work correctly:
+
+### 1. Check initial state
+
+```typescript
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+console.log('Initial exemption status:', isIgnoring);
+```
+
+### 2. Request exemption
+
+```typescript
+await BackgroundGuardian.openBatteryOptimizationSettings();
+// User grants exemption in settings
+```
+
+### 3. Verify change after returning to app
+
+```typescript
+// Use AppState to detect when user returns
+AppState.addEventListener('change', async (state) => {
+  if (state === 'active') {
+    const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    console.log('Updated exemption status:', isIgnoring);
+  }
+});
+```
+
+### 4. Test Doze behavior
+
+With exemption granted, test that your app works during Doze:
+
+```bash
+# Force device into Doze mode
+adb shell dumpsys battery unplug
+adb shell dumpsys deviceidle force-idle
+
+# Your app should maintain network access and wake locks
+```
+
+## Limitations and caveats
+
+### 1. Exemption doesn't override Power Save mode
+
+Battery optimization exemptions only affect Doze mode. Power Save (Battery Saver) mode applies system-wide restrictions to **all apps**, regardless of exemption status:
+
+```typescript
+const isIgnoringOptimization = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+
+if (isIgnoringOptimization && isPowerSave) {
+  console.warn('Exempt from Doze but affected by Power Save mode');
+}
+```
+
+See the [Doze and App Standby](/concepts/doze-and-app-standby) page for more details on the difference.
+
+### 2. OEM restrictions still apply
+
+Standard Android battery optimization exemptions don't prevent OEM-specific battery management from killing your app. Manufacturers like Xiaomi, Huawei, and Samsung have additional battery optimization layers:
+
+```typescript
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+
+if (['xiaomi', 'huawei', 'oppo', 'vivo'].includes(manufacturer?.toLowerCase() ?? '')) {
+  // Also need to handle OEM-specific settings
+  await BackgroundGuardian.openOEMSettings();
+}
+```
+
+See the [OEM Restrictions](/concepts/oem-restrictions) page for comprehensive guidance.
+
+### 3. User can revoke exemption
+
+Users can manually revoke battery optimization exemptions at any time through Settings. Always check status before critical operations:
+
+```typescript
+async function performCriticalTask() {
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    Alert.alert(
+      'Background Access Disabled',
+      'Battery optimization exemption was revoked. Re-enable for reliable operation?',
+      [
+        { text: 'Not Now', style: 'cancel' },
+        { text: 'Enable', onPress: () => requestExemption() },
+      ]
+    );
+    return;
+  }
+  
+  // Proceed with task
+  await doBackgroundWork();
+}
+```
+
+### 4. Android version differences
+
+Battery optimization behavior varies across Android versions:
+
+| Android Version | Behavior |
+|-----------------|----------|
+| **< 6.0 (API 23)** | No battery optimizations exist; all apps run freely |
+| **6.0 - 8.1 (API 23-27)** | Basic Doze mode with maintenance windows |
+| **9.0+ (API 28+)** | App Standby Buckets introduce additional restrictions |
+| **12.0+ (API 31+)** | Stricter alarm and job scheduling limitations |
+
+## Best practices
+
+### 1. Request exemptions only when necessary
+
+Don't request exemptions during onboarding. Wait until the user activates a feature that requires background execution:
+
+```typescript
+async function enableBackgroundSync() {
+  // User opted into background sync - NOW request exemption
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    await requestExemptionWithExplanation();
+  }
+  
+  // Enable the feature
+  await startBackgroundSync();
+}
+```
+
+### 2. Provide clear user education
+
+Always explain **why** you need the exemption before requesting it:
+
+```typescript
+Alert.alert(
+  'Enable Background Sync',
+  'To keep your data up-to-date while the app is closed, we need permission to run in the background. ' +
+  'This ensures you receive timely updates.',
+  [
+    { text: 'Not Now', style: 'cancel' },
+    { text: 'Enable', onPress: () => requestExemption() },
+  ]
+);
+```
+
+### 3. Handle denial gracefully
+
+If the user declines the exemption, provide degraded but functional service:
+
+```typescript
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+
+if (!isIgnoring) {
+  // Fallback to foreground-only sync
+  console.log('Background sync disabled; using foreground-only mode');
+  setupForegroundSync();
+} else {
+  setupBackgroundSync();
+}
+```
+
+### 4. Monitor status changes
+
+Track exemption status throughout the app lifecycle:
+
+```typescript
+import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+
+export function useExemptionStatus() {
+  const [isIgnoring, setIsIgnoring] = useState(false);
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      const status = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+      setIsIgnoring(status);
+    };
+
+    checkStatus();
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  return isIgnoring;
+}
+```
+
+## Related topics
+
+- [Doze and App Standby](/concepts/doze-and-app-standby) - Understand Android's power management
+- [OEM Restrictions](/concepts/oem-restrictions) - Handle manufacturer-specific battery optimization
+- [Wake Locks](/concepts/wake-locks) - Keep the CPU active during background tasks

@@ -1,0 +1,217 @@
+---
+title: isDeviceIdleMode
+description: Check if the device is in idle (Doze) mode
+---
+
+## Overview
+
+Checks if the device is currently in idle (Doze) mode. Doze mode is activated when the device is unplugged, stationary, and the screen is off for a period of time.
+
+```typescript
+function isDeviceIdleMode(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="isIdle" type="boolean">
+  Promise resolving to `true` if the device is in idle (Doze) mode, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Checks `PowerManager.isDeviceIdleMode()`. Available on API 23+ (Android 6.0+). Returns `false` on older versions. |
+| **iOS** | Always returns `false` for API consistency. |
+
+## What is Doze Mode?
+
+Doze mode is an Android power-saving feature introduced in Android 6.0 (Marshmallow). When the device enters Doze mode:
+
+**Restrictions Applied**:
+- ❌ Network access is suspended
+- ❌ Wake locks are ignored
+- ❌ Alarms are deferred (except `setAlarmClock()` and `setAndAllowWhileIdle()`)
+- ❌ WiFi scans are disabled
+- ❌ Sync adapters and JobScheduler don't run
+- ❌ GPS and location updates stop
+
+**Maintenance Windows**:
+- Periodically, the system exits Doze briefly to allow apps to complete pending operations
+- These windows become less frequent over time
+
+**When Doze Activates**:
+1. Screen is off
+2. Device is stationary (no movement detected)
+3. Device is unplugged
+4. Time since screen off exceeds threshold (~30-60 minutes)
+
+## Use Cases
+
+✅ **When to check**:
+- Before attempting network operations
+- To inform users why features aren't working
+- For debugging background task failures
+- To adjust app behavior based on device state
+
+## Example Usage
+
+### Basic Check
+
+```typescript
+import { isDeviceIdleMode } from 'react-native-background-guardian';
+
+const isIdle = await isDeviceIdleMode();
+
+if (isIdle) {
+  console.log('Device is in Doze mode - network and tasks are restricted');
+} else {
+  console.log('Device is active');
+}
+```
+
+### Before Network Request
+
+```typescript
+import { isDeviceIdleMode } from 'react-native-background-guardian';
+
+async function syncData() {
+  const isIdle = await isDeviceIdleMode();
+  
+  if (isIdle) {
+    console.log('Device is in Doze mode, sync will be delayed');
+    // Queue for next maintenance window
+    return;
+  }
+  
+  // Proceed with sync
+  await performDataSync();
+}
+```
+
+### User Notification
+
+```typescript
+import { Alert } from 'react-native';
+import { isDeviceIdleMode } from 'react-native-background-guardian';
+
+async function checkDeviceState() {
+  const isIdle = await isDeviceIdleMode();
+  
+  if (isIdle) {
+    Alert.alert(
+      'Device in Sleep Mode',
+      'Your device is in power-saving mode. Background sync will resume when the device wakes up.'
+    );
+  }
+}
+```
+
+### Status Dashboard
+
+```typescript
+import { useState, useEffect } from 'react';
+import { isDeviceIdleMode, isPowerSaveMode, isIgnoringBatteryOptimizations } from 'react-native-background-guardian';
+
+function DeviceStatusDashboard() {
+  const [status, setStatus] = useState({
+    dozeMode: false,
+    powerSaveMode: false,
+    batteryOptimized: true
+  });
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      const [doze, powerSave, batteryOpt] = await Promise.all([
+        isDeviceIdleMode(),
+        isPowerSaveMode(),
+        isIgnoringBatteryOptimizations()
+      ]);
+
+      setStatus({
+        dozeMode: doze,
+        powerSaveMode: powerSave,
+        batteryOptimized: !batteryOpt
+      });
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000); // Check every 30s
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View>
+      <Text>Device Status:</Text>
+      <Text>Doze Mode: {status.dozeMode ? '🟡 Active' : '🟢 Inactive'}</Text>
+      <Text>Battery Saver: {status.powerSaveMode ? '🟡 On' : '🟢 Off'}</Text>
+      <Text>Battery Optimized: {status.batteryOptimized ? '🔴 Yes' : '🟢 No'}</Text>
+    </View>
+  );
+}
+```
+
+### Debugging Helper
+
+```typescript
+import { isDeviceIdleMode, isIgnoringBatteryOptimizations } from 'react-native-background-guardian';
+
+async function debugBackgroundIssue() {
+  const isIdle = await isDeviceIdleMode();
+  const isIgnoring = await isIgnoringBatteryOptimizations();
+  
+  console.log('=== Background Task Debug ===');
+  console.log('Doze mode active:', isIdle);
+  console.log('Battery optimization exempt:', isIgnoring);
+  
+  if (isIdle && !isIgnoring) {
+    console.log('⚠️ Device is in Doze and app is not exempt!');
+    console.log('Background tasks will be severely restricted.');
+  } else if (isIdle) {
+    console.log('⚠️ Device is in Doze but app is exempt.');
+    console.log('Some restrictions may still apply.');
+  }
+}
+```
+
+### Adaptive Sync Strategy
+
+```typescript
+import { isDeviceIdleMode } from 'react-native-background-guardian';
+
+class SyncManager {
+  async scheduleSyncWithAdaptiveInterval() {
+    const isIdle = await isDeviceIdleMode();
+    
+    if (isIdle) {
+      // In Doze mode: use longer intervals
+      // Sync will happen during maintenance windows
+      this.scheduleSync(15 * 60 * 1000); // 15 minutes
+    } else {
+      // Normal mode: use shorter intervals
+      this.scheduleSync(5 * 60 * 1000); // 5 minutes
+    }
+  }
+}
+```
+
+## Relationship with Battery Optimization
+
+Doze mode affects ALL apps, but behavior differs based on battery optimization status:
+
+| Scenario | Doze Mode Behavior |
+|----------|--------------------|
+| **App IS optimized** (default) | Fully restricted during Doze |
+| **App NOT optimized** ([`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) = true) | Some restrictions lifted, but still limited |
+
+Even if your app is exempt from battery optimizations, Doze mode may still restrict:
+- Network access (partial)
+- Frequency of wake-ups
+- Location updates
+
+## Related APIs
+
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check if app is exempt
+- [`isPowerSaveMode()`](/api/is-power-save-mode) - Check Battery Saver status (different concept)
+- [`acquireWakeLock()`](/api/acquire-wake-lock) - Keep CPU running (limited effectiveness in Doze)

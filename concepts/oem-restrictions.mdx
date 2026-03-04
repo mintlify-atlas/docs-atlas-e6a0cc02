@@ -1,0 +1,631 @@
+---
+title: OEM restrictions
+description: Navigate manufacturer-specific battery optimization settings that standard Android exemptions don't cover
+---
+
+Many Android manufacturers implement aggressive battery optimization features on top of standard Android power management. These OEM-specific restrictions can kill background apps even when the app is exempt from standard Android battery optimizations.
+
+## The OEM battery optimization problem
+
+While Android provides system-level battery optimizations (Doze mode and App Standby), manufacturers like Xiaomi, Huawei, Samsung, Oppo, and Vivo add their own battery management layers with additional restrictions.
+
+### Why standard exemptions aren't enough
+
+You can be fully exempt from Android's battery optimizations but still get killed by OEM restrictions:
+
+```typescript
+// Standard Android exemption - granted ✅
+const isIgnoringOptimization = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+console.log(isIgnoringOptimization); // true
+
+// But on a Xiaomi device...
+// MIUI's "Autostart" is disabled - app gets killed anyway ❌
+```
+
+<Warning>
+**Critical insight**: Standard Android battery optimization exemptions only affect Google's power management. They do **not** override manufacturer-specific battery savers, app killers, or autostart managers.
+</Warning>
+
+## Manufacturer-specific implementations
+
+Each manufacturer implements their own battery optimization system with different settings and behaviors:
+
+### Xiaomi (MIUI)
+
+**Features:**
+- **Autostart Manager** - Controls which apps can start in the background
+- **Battery Saver** - Aggressive app killing when screen is off
+- **App Battery Saver** - Per-app power restrictions
+
+**Settings locations:**
+- Security → Permissions → Autostart
+- Battery & Performance → App Battery Saver
+- Settings → Apps → Manage Apps → [Your App] → Battery Saver → No Restrictions
+
+```typescript
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+
+if (manufacturer === 'xiaomi') {
+  Alert.alert(
+    'MIUI Setup Required',
+    'Please enable Autostart and disable battery optimization in the next screen.',
+    [{ text: 'Open Settings', onPress: () => BackgroundGuardian.openOEMSettings() }]
+  );
+}
+```
+
+<Info>
+**MIUI implementation detail**: The library attempts to open these activities:
+
+1. `com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity`
+2. `com.miui.securitycenter/com.miui.powercenter.PowerSettings`
+
+These are defined in BackgroundGuardianModule.kt:468-480.
+</Info>
+
+### Huawei / Honor (EMUI / Magic UI)
+
+**Features:**
+- **Startup Manager** - Controls background app launches
+- **Protected Apps** - Apps that won't be killed when screen is off
+- **Battery Optimization** - Per-app power management
+
+**Settings locations:**
+- Phone Manager → Startup Manager
+- Settings → Apps → [Your App] → Battery → App Launch (set to Manual)
+- Phone Manager → Protected Apps
+
+```typescript
+if (['huawei', 'honor'].includes(manufacturer?.toLowerCase() ?? '')) {
+  Alert.alert(
+    'EMUI Setup Required',
+    'Please:\n1. Enable "App Launch" (set to Manual)\n2. Enable all toggles\n3. Add to Protected Apps',
+    [{ text: 'Open Settings', onPress: () => BackgroundGuardian.openOEMSettings() }]
+  );
+}
+```
+
+<Info>
+**EMUI implementation detail**: The library tries these activities:
+
+1. `com.huawei.systemmanager/com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity`
+2. `com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity`
+3. `com.huawei.systemmanager/com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity`
+
+From BackgroundGuardianModule.kt:484-502.
+</Info>
+
+### Samsung (OneUI)
+
+**Features:**
+- **Sleeping Apps** - Apps put to sleep when not used
+- **Deep Sleeping Apps** - Aggressive background restriction
+- **Battery Optimization** - Per-app power settings
+
+**Settings locations:**
+- Settings → Battery → Background Usage Limits → Never Sleeping Apps
+- Settings → Apps → [Your App] → Battery → Optimize Battery Usage → All Apps → Disable
+
+```typescript
+if (manufacturer === 'samsung') {
+  Alert.alert(
+    'Samsung Setup Required',
+    'Please:\n1. Add app to "Never Sleeping Apps"\n2. Disable "Put app to sleep"\n3. Set "Battery" to "Unrestricted"',
+    [{ text: 'Open Settings', onPress: () => BackgroundGuardian.openOEMSettings() }]
+  );
+}
+```
+
+<Info>
+**OneUI implementation detail**: The library tries:
+
+1. `com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity`
+2. `com.samsung.android.sm/com.samsung.android.sm.ui.battery.BatteryActivity`
+
+From BackgroundGuardianModule.kt:560-572.
+</Info>
+
+### Oppo / Realme (ColorOS / Realme UI)
+
+**Features:**
+- **Startup Manager** - Background app launch control
+- **Battery Optimization** - Aggressive power management
+- **App Freeze** - Suspends unused apps
+
+**Settings locations:**
+- Settings → Privacy → Permission Manager → Startup Manager
+- Settings → Battery → Power Saving Options (disable)
+- Settings → Apps → [Your App] → Battery → Allow Background Activity
+
+```typescript
+if (['oppo', 'realme'].includes(manufacturer?.toLowerCase() ?? '')) {
+  Alert.alert(
+    'ColorOS Setup Required',
+    'Please enable "Startup Manager" and disable power-saving restrictions.',
+    [{ text: 'Open Settings', onPress: () => BackgroundGuardian.openOEMSettings() }]
+  );
+}
+```
+
+### Vivo (FuntouchOS / OriginOS)
+
+**Features:**
+- **Background Running Apps** - Whitelist for background execution
+- **High Background Power Consumption** - App power monitoring
+- **Autostart** - Control app launches
+
+**Settings locations:**
+- Settings → Battery → Background Power Consumption Management → High Background Power Consumption
+- Settings → More Settings → Applications → Autostart
+- iManager → App Manager → Background Running Apps
+
+```typescript
+if (manufacturer === 'vivo') {
+  Alert.alert(
+    'Vivo Setup Required',
+    'Please:\n1. Enable "High Background Power Consumption"\n2. Enable "Autostart"\n3. Add to "Background Running Apps"',
+    [{ text: 'Open Settings', onPress: () => BackgroundGuardian.openOEMSettings() }]
+  );
+}
+```
+
+### OnePlus (OxygenOS)
+
+**Features:**
+- **Advanced Optimization** - Background app restrictions
+- **Battery Optimization** - Per-app power settings
+
+**Settings locations:**
+- Settings → Apps → [Your App] → Battery → Battery Optimization → Don't Optimize
+- Settings → Battery → Battery Optimization → Advanced Optimization (disable)
+
+### Other manufacturers
+
+The library also supports:
+- **Asus** (ZenUI) - Autostart Manager and mobile manager
+- **Lenovo** - Pure Background feature
+- **Meizu** (Flyme) - Power app permissions
+- **Nokia** (HMD Global) - Power saving exceptions
+
+## Complete OEM compatibility table
+
+Here's a comprehensive list of supported manufacturers and their OEM settings availability:
+
+| Manufacturer | Brand/OS | `openOEMSettings()` Support | Settings Available |
+|--------------|----------|----------------------------|--------------------|
+| Xiaomi | MIUI | ✅ Full | Autostart, Battery Saver |
+| Huawei | EMUI | ✅ Full | Startup Manager, Protected Apps |
+| Honor | Magic UI | ✅ Full | Startup Manager |
+| Samsung | OneUI | ✅ Full | Sleeping Apps, Battery |
+| Oppo | ColorOS | ✅ Full | Startup Manager, Power Saving |
+| Vivo | FuntouchOS | ✅ Full | Background Running, Autostart |
+| OnePlus | OxygenOS | ✅ Full | Advanced Optimization |
+| Realme | Realme UI | ✅ Full | Startup Manager |
+| Asus | ZenUI | ✅ Full | Autostart Manager |
+| Lenovo | - | ✅ Full | Pure Background |
+| Meizu | Flyme | ✅ Full | Power App Permissions |
+| Nokia | - | ✅ Full | Power Saving Exceptions |
+| Google | Stock Android | ⚡ Fallback | Standard battery settings |
+| Other | Stock-based | ⚡ Fallback | Standard battery settings |
+
+**Fallback behavior**: For manufacturers without specific OEM settings, the library falls back to:
+1. Standard battery optimization settings list
+2. App details settings page
+
+## Opening OEM settings
+
+The `openOEMSettings()` method automatically detects the device manufacturer and opens the appropriate settings:
+
+```typescript
+import BackgroundGuardian from 'react-native-background-guardian';
+
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+console.log(`Device: ${manufacturer}`);
+
+const opened = await BackgroundGuardian.openOEMSettings();
+
+if (opened) {
+  console.log('OEM settings opened successfully');
+} else {
+  console.log('No OEM-specific settings available or failed to open');
+}
+```
+
+### How it works internally
+
+The library maintains a map of OEM-specific intents for each manufacturer:
+
+```kotlin
+// From BackgroundGuardianModule.kt:465-647
+private val oemSettingsIntents: Map<String, List<Intent>> = mapOf(
+  "xiaomi" to listOf(
+    Intent().setComponent(ComponentName(
+      "com.miui.securitycenter",
+      "com.miui.permcenter.autostart.AutoStartManagementActivity"
+    )),
+    // ... additional fallback activities
+  ),
+  // ... other manufacturers
+)
+```
+
+When you call `openOEMSettings()`:
+
+1. It detects the manufacturer using `Build.MANUFACTURER`
+2. Looks up the manufacturer in the `oemSettingsIntents` map
+3. Tries each intent in order until one succeeds
+4. Falls back to standard battery optimization settings if no OEM settings work
+5. Final fallback to app details settings
+
+<Note>
+OEM settings activities may not exist on all device variants or OS versions. The library tries multiple known activities per manufacturer and handles failures gracefully.
+</Note>
+
+## Fallback behavior
+
+When OEM-specific settings aren't available or fail to open, the library automatically falls back:
+
+### Fallback level 1: Battery optimization settings
+
+```kotlin
+// From BackgroundGuardianModule.kt:682-686
+if (openBatteryOptimizationSettingsInternal()) {
+  Log.d(TAG, "Opened battery optimization settings as fallback")
+  promise.resolve(true)
+  return
+}
+```
+
+Opens `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS` - the standard Android battery optimization list.
+
+### Fallback level 2: App details
+
+```kotlin
+// From BackgroundGuardianModule.kt:688-693
+if (openAppDetailsSettings()) {
+  Log.d(TAG, "Opened generic app details settings as fallback")
+  promise.resolve(true)
+  return
+}
+```
+
+Opens `ACTION_APPLICATION_DETAILS_SETTINGS` - the app's details page where users can access permissions and other settings.
+
+## Complete setup flow for OEM devices
+
+Here's a comprehensive implementation that handles OEM restrictions alongside standard Android battery optimizations:
+
+```typescript
+import { Alert, Linking } from 'react-native';
+import BackgroundGuardian from 'react-native-background-guardian';
+
+// Manufacturer-specific user instructions
+const OEM_INSTRUCTIONS = {
+  xiaomi: {
+    title: 'MIUI Setup Required',
+    steps: [
+      'Enable "Autostart" for this app',
+      'Set "Battery saver" to "No restrictions"',
+      'Disable "MIUI Optimization" (optional but recommended)',
+    ],
+  },
+  huawei: {
+    title: 'EMUI Setup Required',
+    steps: [
+      'Set "App launch" to Manual and enable all toggles',
+      'Add app to "Protected apps"',
+      'Disable "Close apps after screen lock"',
+    ],
+  },
+  samsung: {
+    title: 'Samsung Setup Required',
+    steps: [
+      'Add app to "Never sleeping apps"',
+      'Disable "Put app to sleep"',
+      'Set battery usage to "Unrestricted"',
+    ],
+  },
+  oppo: {
+    title: 'ColorOS Setup Required',
+    steps: [
+      'Enable in "Startup Manager"',
+      'Allow "Background activity"',
+      'Disable "Freeze in background"',
+    ],
+  },
+  vivo: {
+    title: 'Vivo Setup Required',
+    steps: [
+      'Enable "High background power consumption"',
+      'Enable "Autostart"',
+      'Add to "Background running apps"',
+    ],
+  },
+};
+
+export async function setupBackgroundPermissions() {
+  // Step 1: Check and request standard Android exemption
+  const isIgnoringOptimization = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoringOptimization) {
+    await requestStandardExemption();
+  }
+
+  // Step 2: Check if OEM-specific setup is needed
+  const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+  const needsOEMSetup = [
+    'xiaomi',
+    'huawei',
+    'honor',
+    'samsung',
+    'oppo',
+    'vivo',
+    'realme',
+  ].includes(manufacturer?.toLowerCase() ?? '');
+
+  if (needsOEMSetup) {
+    await requestOEMExemption(manufacturer!);
+  }
+}
+
+async function requestStandardExemption() {
+  return new Promise<void>((resolve) => {
+    Alert.alert(
+      'Battery Optimization',
+      'Please allow this app to run in the background for reliable operation.',
+      [
+        { text: 'Skip', style: 'cancel', onPress: () => resolve() },
+        {
+          text: 'Open Settings',
+          onPress: async () => {
+            await BackgroundGuardian.openBatteryOptimizationSettings();
+            resolve();
+          },
+        },
+      ]
+    );
+  });
+}
+
+async function requestOEMExemption(manufacturer: string) {
+  const instructions = OEM_INSTRUCTIONS[manufacturer.toLowerCase()];
+  
+  if (!instructions) {
+    return; // No specific instructions for this manufacturer
+  }
+
+  return new Promise<void>((resolve) => {
+    const message = instructions.steps
+      .map((step, index) => `${index + 1}. ${step}`)
+      .join('\n');
+
+    Alert.alert(
+      instructions.title,
+      message,
+      [
+        { text: 'Skip', style: 'cancel', onPress: () => resolve() },
+        {
+          text: 'Open Settings',
+          onPress: async () => {
+            const opened = await BackgroundGuardian.openOEMSettings();
+            
+            if (!opened) {
+              Alert.alert(
+                'Settings Not Found',
+                'Could not open manufacturer settings. Please configure manually in your device settings.'
+              );
+            }
+            
+            resolve();
+          },
+        },
+      ]
+    );
+  });
+}
+```
+
+## User experience best practices
+
+### 1. Progressive disclosure
+
+Don't overwhelm users with all settings at once. Start with standard Android exemptions, then guide to OEM settings only if needed:
+
+```typescript
+async function progressiveSetup() {
+  // First: Standard exemption
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    await showStandardExemptionDialog();
+    // Wait for user to complete this step
+    return;
+  }
+
+  // Second: OEM setup (only for affected manufacturers)
+  const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+  if (requiresOEMSetup(manufacturer)) {
+    await showOEMSetupDialog(manufacturer);
+  }
+}
+```
+
+### 2. Visual setup guides
+
+For manufacturers with complex settings, consider providing visual guides:
+
+```typescript
+function showMIUIGuide() {
+  Alert.alert(
+    'MIUI Setup Guide',
+    'We\'ll open the settings. Please follow these steps:\n\n' +
+    '1. Find this app in the list\n' +
+    '2. Tap the toggle to enable Autostart\n' +
+    '3. Press back when done',
+    [
+      {
+        text: 'Show Me',
+        onPress: () => BackgroundGuardian.openOEMSettings(),
+      },
+      {
+        text: 'Video Guide',
+        onPress: () => Linking.openURL('https://yourapp.com/setup/miui'),
+      },
+    ]
+  );
+}
+```
+
+### 3. Setup verification
+
+Since there's no programmatic way to check OEM settings status, use user confirmation:
+
+```typescript
+function verifyOEMSetup() {
+  Alert.alert(
+    'Setup Complete?',
+    'Did you enable all the required settings?',
+    [
+      {
+        text: 'Not Yet',
+        onPress: () => BackgroundGuardian.openOEMSettings(),
+      },
+      {
+        text: 'Yes, All Set',
+        onPress: () => markSetupComplete(),
+      },
+    ]
+  );
+}
+```
+
+### 4. Persistent reminders
+
+For apps that critically depend on background execution, gently remind users:
+
+```typescript
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const OEM_SETUP_KEY = 'oem_setup_completed';
+
+async function checkOEMSetupStatus() {
+  const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+  const needsOEMSetup = requiresOEMSetup(manufacturer);
+  
+  if (!needsOEMSetup) {
+    return true; // No OEM setup needed
+  }
+
+  const setupCompleted = await AsyncStorage.getItem(OEM_SETUP_KEY);
+  
+  if (!setupCompleted) {
+    // Show reminder every 3 days until marked complete
+    const lastReminder = await AsyncStorage.getItem('last_oem_reminder');
+    const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    
+    if (!lastReminder || parseInt(lastReminder) < threeDaysAgo) {
+      await showOEMSetupReminder();
+      await AsyncStorage.setItem('last_oem_reminder', Date.now().toString());
+    }
+    
+    return false;
+  }
+  
+  return true;
+}
+```
+
+## Testing on different OEMs
+
+Testing OEM restrictions requires physical devices from each manufacturer:
+
+### Testing checklist
+
+For each OEM device:
+
+1. **Install app without any exemptions**
+   - Verify background tasks are killed
+   - Check logs for termination
+
+2. **Grant standard Android exemption only**
+   ```typescript
+   await BackgroundGuardian.openBatteryOptimizationSettings();
+   // Grant exemption, return to app
+   ```
+   - Verify if background tasks still get killed
+   - Document behavior
+
+3. **Open OEM settings**
+   ```typescript
+   const opened = await BackgroundGuardian.openOEMSettings();
+   console.log('Settings opened:', opened);
+   ```
+   - Verify correct settings page opens
+   - Grant all necessary permissions
+
+4. **Test background reliability**
+   - Lock screen for 5+ minutes
+   - Verify background tasks continue
+   - Check system logs for kills
+
+5. **Test after reboot**
+   - Restart device
+   - Verify autostart works
+   - Check if settings persist
+
+### Debugging OEM issues
+
+Use ADB to monitor app lifecycle:
+
+```bash
+# Monitor when app is killed
+adb logcat | grep -i "killing\|kill\|force"
+
+# Check if app is in restricted state
+adb shell dumpsys power | grep -i "your.package.name"
+
+# Monitor battery stats
+adb shell dumpsys batterystats --charged your.package.name
+```
+
+## Limitations
+
+### 1. No programmatic detection
+
+There's no Android API to check OEM-specific settings status:
+
+```typescript
+// This doesn't exist:
+// const hasXiaomiAutostart = await BackgroundGuardian.hasXiaomiAutostart(); ❌
+
+// You can only:
+// 1. Check standard exemption
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+// 2. Open settings for user
+await BackgroundGuardian.openOEMSettings();
+// 3. Hope for the best 🤞
+```
+
+### 2. Activities may not exist
+
+OEM settings activities vary by:
+- Device model
+- OS version
+- Region
+- Carrier customization
+
+The library tries multiple known activities but may fail on some variants.
+
+### 3. Settings locations change
+
+Manufacturers frequently reorganize settings between OS versions. The library includes multiple fallback activities per manufacturer, but some devices may require manual navigation.
+
+### 4. User confusion
+
+OEM settings interfaces are often complex and poorly translated, leading to user confusion. Provide clear visual guides or video tutorials for critical apps.
+
+## Related topics
+
+- [Battery Optimization](/concepts/battery-optimization) - Standard Android exemptions
+- [Doze and App Standby](/concepts/doze-and-app-standby) - Android's power management
+- [Wake Locks](/concepts/wake-locks) - Keep CPU running during tasks

@@ -1,0 +1,275 @@
+---
+title: openPowerSaveModeSettings
+description: Open the system Power Save Mode (Battery Saver) settings
+---
+
+## Overview
+
+Opens the system Power Save Mode (Battery Saver) settings where users can enable/disable Battery Saver mode and configure automatic activation.
+
+```typescript
+function openPowerSaveModeSettings(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if settings were successfully opened, `false` if the settings couldn't be opened.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Opens Battery Saver settings page. Tries multiple intents with fallbacks: `ACTION_BATTERY_SAVER_SETTINGS` → `ACTION_POWER_USAGE_SUMMARY` → `ACTION_SETTINGS`. |
+| **iOS** | No-op that returns `false` immediately. |
+
+## When to Use
+
+Use this method to guide users to disable Battery Saver when your app requires full performance or background capabilities:
+
+✅ **Good use cases**:
+- User is experiencing limited functionality
+- Background sync is failing due to Power Save restrictions
+- App requires full CPU performance
+- Real-time features are degraded
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+const opened = await openPowerSaveModeSettings();
+
+if (opened) {
+  console.log('Battery Saver settings opened');
+} else {
+  console.log('Could not open settings');
+}
+```
+
+### Guide User When Battery Saver Detected
+
+```typescript
+import { Alert } from 'react-native';
+import { isPowerSaveMode, openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+async function checkBatterySaver() {
+  const isPowerSave = await isPowerSaveMode();
+  
+  if (isPowerSave) {
+    Alert.alert(
+      'Battery Saver Active',
+      'Background features are limited while Battery Saver is on. Would you like to disable it?',
+      [
+        { text: 'Not Now', style: 'cancel' },
+        { 
+          text: 'Open Settings',
+          onPress: async () => {
+            const opened = await openPowerSaveModeSettings();
+            if (!opened) {
+              Alert.alert('Error', 'Could not open settings');
+            }
+          }
+        }
+      ]
+    );
+  }
+}
+```
+
+### Settings Screen
+
+```typescript
+import { useState, useEffect } from 'react';
+import { isPowerSaveMode, openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+function BatterySettingsScreen() {
+  const [isPowerSave, setIsPowerSave] = useState(false);
+
+  const checkStatus = async () => {
+    const status = await isPowerSaveMode();
+    setIsPowerSave(status);
+  };
+
+  useEffect(() => {
+    checkStatus();
+    
+    // Re-check when user returns to app
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkStatus();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View>
+      <Text>Battery Saver Status</Text>
+      <Text>Current: {isPowerSave ? '🟡 On' : '🟢 Off'}</Text>
+      
+      {isPowerSave && (
+        <View>
+          <Text style={{ color: 'orange' }}>
+            Battery Saver limits app performance and background activity.
+            Consider disabling it for the best experience.
+          </Text>
+          <Button 
+            title="Open Battery Saver Settings" 
+            onPress={openPowerSaveModeSettings}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Startup Check with Guidance
+
+```typescript
+import { isPowerSaveMode, openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+function App() {
+  useEffect(() => {
+    const checkOnStartup = async () => {
+      const isPowerSave = await isPowerSaveMode();
+      
+      if (isPowerSave) {
+        // Show non-blocking notification
+        showToast(
+          'Battery Saver is on. Tap to disable.',
+          () => openPowerSaveModeSettings()
+        );
+      }
+    };
+
+    checkOnStartup();
+  }, []);
+
+  return <AppContent />;
+}
+```
+
+### Troubleshooting Flow
+
+```typescript
+import { 
+  isPowerSaveMode, 
+  isIgnoringBatteryOptimizations,
+  openPowerSaveModeSettings,
+  requestBatteryOptimizationExemption
+} from 'react-native-background-guardian';
+
+function TroubleshootBackgroundIssues() {
+  const [checks, setChecks] = useState({
+    powerSave: false,
+    batteryOptimized: true
+  });
+
+  useEffect(() => {
+    const runChecks = async () => {
+      const [powerSave, batteryExempt] = await Promise.all([
+        isPowerSaveMode(),
+        isIgnoringBatteryOptimizations()
+      ]);
+
+      setChecks({
+        powerSave,
+        batteryOptimized: !batteryExempt
+      });
+    };
+
+    runChecks();
+  }, []);
+
+  const issues = [
+    checks.powerSave && {
+      title: 'Battery Saver is On',
+      description: 'Limits all background activity',
+      action: 'Disable Battery Saver',
+      onPress: openPowerSaveModeSettings
+    },
+    checks.batteryOptimized && {
+      title: 'Battery Optimization Enabled',
+      description: 'App may be restricted',
+      action: 'Disable Optimization',
+      onPress: requestBatteryOptimizationExemption
+    }
+  ].filter(Boolean);
+
+  return (
+    <View>
+      <Text>Background Issues Detected:</Text>
+      {issues.map((issue, index) => (
+        <View key={index}>
+          <Text>{issue.title}</Text>
+          <Text>{issue.description}</Text>
+          <Button title={issue.action} onPress={issue.onPress} />
+        </View>
+      ))}
+      {issues.length === 0 && <Text>✓ All checks passed</Text>}
+    </View>
+  );
+}
+```
+
+### With Error Handling
+
+```typescript
+import { openPowerSaveModeSettings } from 'react-native-background-guardian';
+
+async function openBatterySaverSettings() {
+  const opened = await openPowerSaveModeSettings();
+  
+  if (!opened) {
+    Alert.alert(
+      'Could Not Open Settings',
+      'Please open Settings > Battery > Battery Saver manually.'
+    );
+  }
+}
+```
+
+## Fallback Behavior
+
+The method tries multiple intents with fallbacks:
+
+1. **First attempt**: `ACTION_BATTERY_SAVER_SETTINGS` (API 22+)
+   - Opens Battery Saver settings directly
+
+2. **Second attempt**: `ACTION_POWER_USAGE_SUMMARY`
+   - Opens general battery usage page
+
+3. **Third attempt**: `ACTION_SETTINGS`
+   - Opens main settings page
+
+If all fail, returns `false`.
+
+## User Instructions
+
+When guiding users, provide clear instructions:
+
+```typescript
+Alert.alert(
+  'Disable Battery Saver',
+  'To improve app performance:\n\n' +
+  '1. Tap "Open Settings" below\n' +
+  '2. Toggle "Battery Saver" off\n' +
+  '3. Return to the app',
+  [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Open Settings', onPress: openPowerSaveModeSettings }
+  ]
+);
+```
+
+## Related APIs
+
+- [`isPowerSaveMode()`](/api/is-power-save-mode) - Check Battery Saver status
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check battery optimization (different setting)
+- [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) - Open battery optimization settings

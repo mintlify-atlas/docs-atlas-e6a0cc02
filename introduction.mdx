@@ -1,0 +1,102 @@
+---
+title: Introduction
+description: A cross-platform React Native library that prevents Android from killing background processes through Wake Locks, battery optimization exemptions, and OEM-specific protections.
+---
+
+## Overview
+
+React Native Background Guardian is a cross-platform library designed to help your React Native apps survive aggressive Android background process restrictions. While Android implements multiple layers of battery optimization to preserve device battery life, these restrictions can interfere with apps that legitimately need to run in the background.
+
+The library provides a comprehensive toolkit for managing wake locks, battery optimizations, and OEM-specific settings, with a safe iOS-compatible no-op implementation.
+
+## Why you need this library
+
+Android's power management features like Doze mode, App Standby, and manufacturer-specific battery savers can kill your app's background processes, even when users need them to keep running. This affects apps that:
+
+- Play audio or podcasts in the background
+- Track fitness or health metrics
+- Provide messaging or VoIP services
+- Manage IoT or smart home devices
+- Perform scheduled task automation
+- Offer location-based services
+
+Without proper wake lock management and battery optimization exemptions, your app may be suspended unexpectedly, leading to poor user experience.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Wake lock management" icon="lock">
+    Keep CPU running during background tasks with partial wake locks
+  </Card>
+  
+  <Card title="Screen wake lock" icon="display">
+    Keep the screen on while the app is in the foreground
+  </Card>
+  
+  <Card title="Battery optimization exemption" icon="battery-full">
+    Request Doze mode whitelist for reliable background execution
+  </Card>
+  
+  <Card title="Power save mode detection" icon="bolt">
+    Detect and manage Battery Saver mode restrictions
+  </Card>
+  
+  <Card title="OEM-specific settings" icon="mobile">
+    Navigate to manufacturer battery settings for Xiaomi, Samsung, Huawei, and more
+  </Card>
+  
+  <Card title="Cross-platform" icon="code">
+    Safe no-op implementation for iOS with full TypeScript support
+  </Card>
+</CardGroup>
+
+## Platform support
+
+### Android
+
+Full functionality with support for:
+- Wake locks via PowerManager
+- Battery optimization exemption dialogs
+- OEM-specific settings for 12+ manufacturers
+- Doze mode and Power Save mode detection
+
+### iOS
+
+Safe no-op implementation that returns appropriate default values. iOS handles background execution differently through Background Modes, so most methods return `true` or safe defaults without performing operations.
+
+<Note>
+  The library is built as a Turbo Module and is ready for React Native's New Architecture.
+</Note>
+
+## OEM compatibility
+
+Many Android manufacturers implement aggressive battery optimization beyond standard Android features. Background Guardian supports opening manufacturer-specific settings for:
+
+- Xiaomi (MIUI)
+- Samsung (OneUI)
+- Huawei/Honor (EMUI/Magic UI)
+- OnePlus (OxygenOS)
+- Oppo (ColorOS)
+- Vivo (FuntouchOS)
+- Realme (Realme UI)
+- Asus (ZenUI)
+- And more...
+
+For unsupported manufacturers, the library gracefully falls back to standard Android battery optimization settings.
+
+## Use cases
+
+Background Guardian is ideal for apps that require reliable background execution:
+
+| Use case | Description |
+| --- | --- |
+| Chat / Voice / Video | Real-time messaging where FCM High Priority is insufficient |
+| Task automation | Apps that schedule automated actions |
+| Health / Fitness | Workout and activity tracking |
+| Device connection | Companion apps for smartwatches, IoT devices |
+| Safety | Personal safety and SOS apps |
+| VPN / Proxy | Network tools requiring continuous operation |
+
+<Warning>
+  Google Play has restrictions on using `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission. Only use this library if your app genuinely requires background execution and falls into one of the acceptable use cases above.
+</Warning>

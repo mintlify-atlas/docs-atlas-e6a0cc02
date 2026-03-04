@@ -1,0 +1,249 @@
+---
+title: requestBatteryOptimizationExemption
+description: Request battery optimization exemption from the user
+---
+
+## Overview
+
+Opens the system dialog to request battery optimization exemption. This allows the user to whitelist the app from Doze mode and App Standby restrictions.
+
+```typescript
+function requestBatteryOptimizationExemption(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if the dialog was shown, `false` if the dialog couldn't be opened or the app is already exempt.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Launches the `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` intent, showing a system dialog asking the user to allow the app to ignore battery optimizations. The user must manually approve. Available on API 23+ (Android 6.0+). |
+| **iOS** | No-op that returns `true` immediately. |
+
+## Google Play Policy Warning
+
+<Warning>
+  **Google Play has strict restrictions on apps requesting this permission.**
+  
+  Only use this API if your app genuinely requires background execution:
+  - ✅ Messaging apps
+  - ✅ Health/fitness tracking
+  - ✅ Device management/enterprise apps
+  - ✅ Accessibility services
+  - ✅ Alarm/reminder apps
+  
+  Apps that don't meet Google's acceptable use cases may be rejected or removed from the Play Store.
+  
+  See [Google Play Policy](https://support.google.com/googleplay/android-developer/answer/9888170) for details.
+</Warning>
+
+## Permission Required
+
+This method requires the `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission in your `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+```
+
+This permission is automatically added by the library.
+
+## Important Notes
+
+- **User Approval Required**: The user must manually tap "Allow" in the system dialog. The app cannot force exemption.
+- **Already Exempt**: If the app is already ignoring battery optimizations, the dialog won't be shown and the method returns `true`.
+- **Check First**: Use [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) to check before requesting.
+- **Alternative**: Consider using [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) instead, which doesn't require special permission.
+
+## Example Usage
+
+### Basic Request
+
+```typescript
+import { requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+const dialogShown = await requestBatteryOptimizationExemption();
+
+if (dialogShown) {
+  console.log('User was prompted for battery optimization exemption');
+} else {
+  console.log('Dialog could not be shown (may already be exempt)');
+}
+```
+
+### Check Before Requesting
+
+```typescript
+import { isIgnoringBatteryOptimizations, requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+const isIgnoring = await isIgnoringBatteryOptimizations();
+
+if (!isIgnoring) {
+  const dialogShown = await requestBatteryOptimizationExemption();
+  
+  if (dialogShown) {
+    console.log('User was prompted for battery optimization exemption');
+  }
+} else {
+  console.log('Already ignoring battery optimizations');
+}
+```
+
+### With User Explanation
+
+```typescript
+import { Alert } from 'react-native';
+import { isIgnoringBatteryOptimizations, requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+async function requestBackgroundPermission() {
+  const isIgnoring = await isIgnoringBatteryOptimizations();
+  
+  if (isIgnoring) {
+    console.log('Already have permission');
+    return true;
+  }
+
+  // Explain to user why this is needed
+  return new Promise((resolve) => {
+    Alert.alert(
+      'Background Access Required',
+      'This app needs to run in the background to sync your messages. Please allow it to ignore battery optimizations.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => resolve(false)
+        },
+        {
+          text: 'Allow',
+          onPress: async () => {
+            const shown = await requestBatteryOptimizationExemption();
+            resolve(shown);
+          }
+        }
+      ]
+    );
+  });
+}
+```
+
+### Onboarding Flow
+
+```typescript
+import { requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+function OnboardingScreen({ navigation }) {
+  const handleContinue = async () => {
+    // Request battery optimization exemption during onboarding
+    await requestBatteryOptimizationExemption();
+    
+    // Continue to next screen regardless of user choice
+    navigation.navigate('Home');
+  };
+
+  return (
+    <View>
+      <Text>Step 2: Allow Background Access</Text>
+      <Text>
+        To keep your data synced, this app needs to run in the background.
+        The next dialog will ask for permission.
+      </Text>
+      <Button title="Continue" onPress={handleContinue} />
+    </View>
+  );
+}
+```
+
+### Settings Screen
+
+```typescript
+import { useState, useEffect } from 'react';
+import { 
+  isIgnoringBatteryOptimizations, 
+  requestBatteryOptimizationExemption 
+} from 'react-native-background-guardian';
+
+function BackgroundSettingsScreen() {
+  const [isIgnoring, setIsIgnoring] = useState(false);
+
+  const checkStatus = async () => {
+    const status = await isIgnoringBatteryOptimizations();
+    setIsIgnoring(status);
+  };
+
+  const handleRequest = async () => {
+    await requestBatteryOptimizationExemption();
+    
+    // Re-check status after user interaction
+    setTimeout(() => {
+      checkStatus();
+    }, 1000);
+  };
+
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  return (
+    <View>
+      <Text>Background Access</Text>
+      <Text>Status: {isIgnoring ? '✓ Enabled' : '✗ Disabled'}</Text>
+      
+      {!isIgnoring && (
+        <Button 
+          title="Enable Background Access" 
+          onPress={handleRequest}
+        />
+      )}
+      
+      {isIgnoring && (
+        <Text style={{ color: 'green' }}>Background access is enabled</Text>
+      )}
+    </View>
+  );
+}
+```
+
+### With Error Handling
+
+```typescript
+import { requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+try {
+  const shown = await requestBatteryOptimizationExemption();
+  
+  if (!shown) {
+    Alert.alert(
+      'Error',
+      'Could not open battery optimization settings. Your device may not support this feature.'
+    );
+  }
+} catch (error) {
+  console.error('Failed to request battery optimization exemption:', error);
+}
+```
+
+## Alternative Approach
+
+If you want to avoid Google Play policy concerns, use [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) instead:
+
+```typescript
+import { openBatteryOptimizationSettings } from 'react-native-background-guardian';
+
+// Opens settings list without special permission
+await openBatteryOptimizationSettings();
+```
+
+This approach:
+- ✅ Doesn't require `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission
+- ✅ Complies with Google Play policies
+- ❌ Requires more user steps (they must find your app in the list)
+
+## Related APIs
+
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check exemption status
+- [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) - Open settings list (alternative)
+- [`openOEMSettings()`](/api/open-oem-settings) - Open OEM-specific settings

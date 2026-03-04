@@ -1,0 +1,308 @@
+---
+title: openOEMSettings
+description: Open manufacturer-specific battery settings
+---
+
+## Overview
+
+Opens OEM-specific battery or background settings if available for the current device. Many Android manufacturers implement aggressive battery optimization features that can kill apps even when standard Android battery optimizations are disabled.
+
+```typescript
+function openOEMSettings(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if OEM settings were successfully opened, `false` if the device doesn't have recognized OEM settings or if opening failed.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Attempts to open manufacturer-specific battery/autostart settings. Tries multiple known activities for each manufacturer. Falls back to standard battery optimization settings if no OEM settings found. |
+| **iOS** | No-op that returns `false` immediately. Apple devices don't have OEM-specific battery settings. |
+
+## Why OEM Settings Matter
+
+Standard Android battery optimization APIs are often insufficient. Many manufacturers add their own aggressive power management:
+
+❌ **Problem**: Even with battery optimization disabled via [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations), manufacturers' custom systems may still kill your app.
+
+✅ **Solution**: Guide users to whitelist your app in the manufacturer's settings.
+
+## Supported Manufacturers
+
+This method recognizes and attempts to open settings for:
+
+- **Xiaomi** (MIUI) - Autostart and battery settings
+- **Samsung** (OneUI) - Battery and app management
+- **Huawei** (EMUI) - App launch and protected apps
+- **Honor** - Startup manager
+- **OnePlus** (OxygenOS) - Chain launch management
+- **Oppo** (ColorOS) - Startup app list
+- **Vivo** (FuntouchOS) - Background startup manager
+- **Realme** (based on ColorOS) - Startup settings
+- **Asus** (ZenUI) - Autostart management
+- **Lenovo** - Background management
+- **Meizu** (Flyme) - Power permissions
+- **Nokia** (HMD Global) - Power saver exceptions
+
+For unlisted manufacturers, it falls back to standard Android battery optimization settings.
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { openOEMSettings, getDeviceManufacturer } from 'react-native-background-guardian';
+
+const manufacturer = await getDeviceManufacturer();
+console.log(`Device: ${manufacturer}`);
+
+const opened = await openOEMSettings();
+
+if (opened) {
+  console.log('OEM battery settings opened');
+} else {
+  console.log('No OEM-specific settings available');
+}
+```
+
+### Check Manufacturer First
+
+```typescript
+import { getDeviceManufacturer, openOEMSettings } from 'react-native-background-guardian';
+
+const manufacturer = await getDeviceManufacturer();
+
+// List of manufacturers with known aggressive battery management
+const aggressiveManufacturers = ['xiaomi', 'huawei', 'honor', 'oppo', 'vivo', 'realme'];
+
+if (manufacturer && aggressiveManufacturers.includes(manufacturer.toLowerCase())) {
+  Alert.alert(
+    'Additional Setup Required',
+    `Your ${manufacturer} device requires additional settings to allow background operation.`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open Settings', onPress: () => openOEMSettings() }
+    ]
+  );
+}
+```
+
+### Manufacturer-Specific Instructions
+
+```typescript
+import { getDeviceManufacturer, openOEMSettings } from 'react-native-background-guardian';
+
+const MANUFACTURER_INSTRUCTIONS = {
+  xiaomi: {
+    title: 'MIUI Battery Settings',
+    steps: [
+      'Find your app in the list',
+      'Enable "Autostart"',
+      'Set battery saver to "No restrictions"'
+    ]
+  },
+  samsung: {
+    title: 'Samsung Battery Settings',
+    steps: [
+      'Find your app',
+      'Ensure it\'s not in "Sleeping apps"',
+      'Add to "Never sleeping apps" if needed'
+    ]
+  },
+  huawei: {
+    title: 'EMUI Protected Apps',
+    steps: [
+      'Find your app in the list',
+      'Toggle it ON to protect from closure'
+    ]
+  }
+};
+
+function showOEMInstructions() {
+  const manufacturer = await getDeviceManufacturer();
+  const instructions = MANUFACTURER_INSTRUCTIONS[manufacturer?.toLowerCase()];
+
+  if (instructions) {
+    Alert.alert(
+      instructions.title,
+      instructions.steps.map((step, i) => `${i + 1}. ${step}`).join('\n'),
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => openOEMSettings() }
+      ]
+    );
+  } else {
+    openOEMSettings();
+  }
+}
+```
+
+### Onboarding Flow
+
+```typescript
+import { getDeviceManufacturer, openOEMSettings } from 'react-native-background-guardian';
+
+function OnboardingOEMSettings({ navigation }) {
+  const [manufacturer, setManufacturer] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDeviceManufacturer().then(setManufacturer);
+  }, []);
+
+  const needsOEMSetup = manufacturer && 
+    ['xiaomi', 'huawei', 'honor', 'oppo', 'vivo'].includes(manufacturer.toLowerCase());
+
+  if (!needsOEMSetup) {
+    // Skip this screen for devices that don't need OEM setup
+    navigation.navigate('Home');
+    return null;
+  }
+
+  return (
+    <View>
+      <Text>Step 4: {manufacturer} Battery Settings</Text>
+      <Text>
+        Your {manufacturer} device has additional battery management settings.
+        Please whitelist this app to ensure it runs reliably in the background.
+      </Text>
+      <Button 
+        title="Open Settings"
+        onPress={async () => {
+          await openOEMSettings();
+        }}
+      />
+      <Button title="Skip" onPress={() => navigation.navigate('Home')} />
+    </View>
+  );
+}
+```
+
+### Troubleshooting Screen
+
+```typescript
+import { 
+  getDeviceManufacturer, 
+  openOEMSettings,
+  openBatteryOptimizationSettings 
+} from 'react-native-background-guardian';
+
+function TroubleshootingScreen() {
+  const [manufacturer, setManufacturer] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDeviceManufacturer().then(setManufacturer);
+  }, []);
+
+  return (
+    <View>
+      <Text>Background Issues?</Text>
+      <Text>Device: {manufacturer || 'Unknown'}</Text>
+      
+      <Button 
+        title="Standard Battery Settings"
+        onPress={openBatteryOptimizationSettings}
+      />
+      
+      <Button 
+        title={`${manufacturer || 'Manufacturer'} Settings`}
+        onPress={openOEMSettings}
+      />
+      
+      <Text style={{ marginTop: 20 }}>
+        If background features aren't working, try both settings above.
+      </Text>
+    </View>
+  );
+}
+```
+
+### Complete Setup Helper
+
+```typescript
+import {
+  isIgnoringBatteryOptimizations,
+  requestBatteryOptimizationExemption,
+  getDeviceManufacturer,
+  openOEMSettings
+} from 'react-native-background-guardian';
+
+async function completeBackgroundSetup() {
+  // Step 1: Check battery optimization
+  const isIgnoring = await isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    await requestBatteryOptimizationExemption();
+  }
+  
+  // Step 2: Check if OEM settings needed
+  const manufacturer = await getDeviceManufacturer();
+  const needsOEM = ['xiaomi', 'huawei', 'oppo', 'vivo'].includes(
+    manufacturer?.toLowerCase() || ''
+  );
+  
+  if (needsOEM) {
+    Alert.alert(
+      'One More Step',
+      `Your ${manufacturer} device needs additional setup for background operation.`,
+      [
+        { text: 'Skip', style: 'cancel' },
+        { text: 'Continue', onPress: () => openOEMSettings() }
+      ]
+    );
+  }
+}
+```
+
+### With Fallback
+
+```typescript
+import { openOEMSettings, openBatteryOptimizationSettings } from 'react-native-background-guardian';
+
+async function openBatterySettings() {
+  // Try OEM settings first
+  const opened = await openOEMSettings();
+  
+  if (!opened) {
+    // Fallback to standard settings
+    console.log('No OEM settings, opening standard battery optimization');
+    await openBatteryOptimizationSettings();
+  }
+}
+```
+
+## Implementation Details
+
+The method:
+
+1. Detects manufacturer using `Build.MANUFACTURER`
+2. Tries multiple known component intents for that manufacturer
+3. Falls back to standard battery optimization settings
+4. Falls back to app details settings
+5. Returns `false` if nothing could be opened
+
+## Testing
+
+Since OEM settings vary by manufacturer:
+
+```typescript
+import { getDeviceManufacturer, openOEMSettings } from 'react-native-background-guardian';
+
+// Debug what manufacturer is detected
+const manufacturer = await getDeviceManufacturer();
+console.log('Detected manufacturer:', manufacturer);
+
+// Try opening settings
+const opened = await openOEMSettings();
+console.log('Settings opened:', opened);
+```
+
+## Related APIs
+
+- [`getDeviceManufacturer()`](/api/get-device-manufacturer) - Get manufacturer name
+- [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) - Standard Android settings
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check standard battery optimization

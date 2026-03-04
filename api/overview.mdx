@@ -1,0 +1,122 @@
+---
+title: API Overview
+description: Complete API reference for React Native Background Guardian
+---
+
+## Introduction
+
+React Native Background Guardian provides a comprehensive API to prevent Android from killing background processes. The library offers methods for managing wake locks, battery optimizations, and OEM-specific settings.
+
+## Installation
+
+```typescript
+import BackgroundGuardian, {
+  acquireWakeLock,
+  releaseWakeLock,
+  isIgnoringBatteryOptimizations,
+  // ... other named exports
+} from 'react-native-background-guardian';
+```
+
+## Import Options
+
+You can use either the default export or named exports:
+
+```typescript
+// Option 1: Default export (object-style API)
+import BackgroundGuardian from 'react-native-background-guardian';
+await BackgroundGuardian.acquireWakeLock('MyTask');
+
+// Option 2: Named exports (functional API)
+import { acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+await acquireWakeLock('MyTask');
+await releaseWakeLock();
+```
+
+## TypeScript Support
+
+The library is written in TypeScript and includes complete type definitions. All functions return typed promises:
+
+```typescript
+const isHeld: boolean = await isWakeLockHeld();
+const manufacturer: string | null = await getDeviceManufacturer();
+```
+
+## API Categories
+
+### Wake Lock Management
+
+Control CPU wake locks to keep background tasks running:
+
+- [`acquireWakeLock()`](/api/acquire-wake-lock) - Acquire a partial wake lock
+- [`releaseWakeLock()`](/api/release-wake-lock) - Release the wake lock
+- [`isWakeLockHeld()`](/api/is-wake-lock-held) - Check wake lock status
+
+### Screen Wake Lock
+
+Keep the screen on while the app is in the foreground:
+
+- [`enableScreenWakeLock()`](/api/enable-screen-wake-lock) - Keep screen on
+- [`disableScreenWakeLock()`](/api/disable-screen-wake-lock) - Allow screen to sleep
+
+### Battery Optimization
+
+Manage battery optimization exemptions:
+
+- [`isIgnoringBatteryOptimizations()`](/api/is-ignoring-battery-optimizations) - Check exemption status
+- [`requestBatteryOptimizationExemption()`](/api/request-battery-optimization-exemption) - Request exemption
+- [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) - Open settings
+
+### Power Management
+
+Monitor device power states:
+
+- [`isDeviceIdleMode()`](/api/is-device-idle-mode) - Check Doze mode status
+- [`isPowerSaveMode()`](/api/is-power-save-mode) - Check Battery Saver status
+- [`openPowerSaveModeSettings()`](/api/open-power-save-mode-settings) - Open settings
+
+### OEM Settings
+
+Access manufacturer-specific battery settings:
+
+- [`openOEMSettings()`](/api/open-oem-settings) - Open OEM settings
+- [`getDeviceManufacturer()`](/api/get-device-manufacturer) - Get manufacturer name
+
+## Platform Behavior
+
+Most APIs are Android-specific:
+
+- **Android**: Full functionality as documented
+- **iOS**: Most methods are no-ops that return safe default values
+
+iOS handles background execution differently through Background Modes configured in Xcode.
+
+## Basic Usage Pattern
+
+```typescript
+import { acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+// Before starting background work
+const acquired = await acquireWakeLock('MyBackgroundTask');
+
+if (acquired) {
+  try {
+    // Perform your background work
+    await doBackgroundWork();
+  } finally {
+    // Always release when done
+    await releaseWakeLock();
+  }
+}
+```
+
+## Error Handling
+
+All methods return boolean promises that resolve to `false` on error rather than throwing exceptions. This makes error handling straightforward:
+
+```typescript
+const success = await acquireWakeLock();
+if (!success) {
+  console.error('Failed to acquire wake lock');
+}
+```

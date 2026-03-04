@@ -1,0 +1,330 @@
+---
+title: Testing and debugging
+description: How to test Doze mode, debug wake locks, and verify battery optimization behavior
+---
+
+## Testing Doze mode
+
+Android's Doze mode is triggered when the device is unplugged, stationary, and the screen is off for an extended period. You can force your device into Doze mode using ADB commands to test how your app behaves.
+
+### Prerequisites
+
+- Android device or emulator connected via ADB
+- USB debugging enabled on device
+- ADB installed on your development machine
+
+### Force device into Doze mode
+
+1. **Disconnect device from charger** (required for Doze mode)
+
+2. **Connect via ADB**
+   ```bash
+   adb devices
+   ```
+
+3. **Unplug USB charging** (if testing on physical device)
+   ```bash
+   adb shell dumpsys battery unplug
+   ```
+
+4. **Force device into idle state**
+   ```bash
+   adb shell dumpsys deviceidle force-idle
+   ```
+
+5. **Verify Doze mode is active**
+   ```typescript
+   const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+   console.log('Device in Doze mode:', isIdle);
+   ```
+
+### Exit Doze mode
+
+To return the device to normal operation:
+
+```bash
+# Exit idle mode
+adb shell dumpsys deviceidle unforce
+
+# Reset battery status
+adb shell dumpsys battery reset
+```
+
+<Warning>
+  Always reset battery status after testing. Otherwise, your device may continue to report it's unplugged even when connected to power.
+</Warning>
+
+### Step through Doze mode states
+
+To gradually simulate the Doze mode progression:
+
+```bash
+# Move to next idle state
+adb shell dumpsys deviceidle step
+
+# Repeat multiple times to reach deep idle
+adb shell dumpsys deviceidle step
+adb shell dumpsys deviceidle step
+```
+
+## Debugging wake locks
+
+### Check if wake lock is held
+
+Use ADB to inspect all active wake locks on the device:
+
+```bash
+adb shell dumpsys power | grep "BackgroundGuardian"
+```
+
+This shows:
+- Whether your wake lock is active
+- How long it has been held
+- The wake lock tag (if you specified one)
+
+### Example output
+
+```
+Wake Locks: size=2
+  PARTIAL_WAKE_LOCK              'BackgroundGuardian' (uid=10123, pid=12345, ws=WorkSource{10123})
+    tag="AudioPlayer"
+    flags=0x1
+    activated=true
+```
+
+### Check wake lock programmatically
+
+Add debug logging to your app:
+
+```typescript
+import BackgroundGuardian from "react-native-background-guardian";
+
+async function debugWakeLock() {
+  const isHeld = await BackgroundGuardian.isWakeLockHeld();
+  console.log('Wake lock held:', isHeld);
+  
+  if (!isHeld) {
+    console.warn('Wake lock was released unexpectedly!');
+  }
+}
+
+// Check periodically
+setInterval(debugWakeLock, 10000); // Every 10 seconds
+```
+
+### View all system wake locks
+
+To see all wake locks from all apps:
+
+```bash
+adb shell dumpsys power
+```
+
+Look for the "Wake Locks" section in the output.
+
+## Checking battery optimization status
+
+### Via ADB
+
+Check if your app is whitelisted from battery optimizations:
+
+```bash
+adb shell dumpsys deviceidle whitelist
+```
+
+Look for your app's package name in the output.
+
+### Via app code
+
+Add logging to verify exemption status:
+
+```typescript
+import BackgroundGuardian from "react-native-background-guardian";
+import { AppState } from "react-native";
+
+function useBatteryOptimizationDebug() {
+  useEffect(() => {
+    async function checkStatus() {
+      const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+      const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+      const isIdle = await BackgroundGuardian.isDeviceIdleMode();
+      
+      console.log('Battery Optimization Status:', {
+        isIgnoringOptimizations: isIgnoring,
+        isPowerSaveMode: isPowerSave,
+        isDeviceIdle: isIdle,
+      });
+    }
+    
+    checkStatus();
+    
+    // Re-check when app returns to foreground
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkStatus();
+      }
+    });
+    
+    return () => subscription.remove();
+  }, []);
+}
+```
+
+## Testing OEM-specific settings
+
+### Check device manufacturer
+
+```typescript
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+console.log('Device manufacturer:', manufacturer);
+
+// Test OEM settings availability
+const opened = await BackgroundGuardian.openOEMSettings();
+console.log('OEM settings opened:', opened);
+```
+
+### Manual testing checklist
+
+For devices with aggressive battery optimization:
+
+- [ ] Test on Xiaomi (MIUI)
+- [ ] Test on Huawei (EMUI)
+- [ ] Test on Samsung (OneUI)
+- [ ] Test on Oppo (ColorOS)
+- [ ] Test on Vivo (FuntouchOS)
+
+Verify that:
+1. `openOEMSettings()` opens the correct settings page
+2. The settings page allows whitelisting your app
+3. Background functionality works after whitelisting
+
+## Common debugging scenarios
+
+### Scenario 1: Wake lock released unexpectedly
+
+**Symptoms:** Background task stops running even though wake lock was acquired.
+
+**Debug steps:**
+
+```bash
+# Check if wake lock is still held
+adb shell dumpsys power | grep "BackgroundGuardian"
+
+# Check battery optimization status
+adb shell dumpsys deviceidle whitelist | grep com.yourapp
+
+# Check if device is in Doze mode
+adb shell dumpsys deviceidle get deep
+```
+
+**Common causes:**
+- Wake lock timeout expired (default 24 hours)
+- App was force-stopped by user
+- OEM battery optimization killed the app
+
+### Scenario 2: Battery exemption not working
+
+**Symptoms:** App still killed in background despite exemption.
+
+**Debug steps:**
+
+```typescript
+// Verify exemption status
+const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+console.log('Exemption granted:', isIgnoring);
+
+// Check Power Save mode (affects even exempt apps)
+const isPowerSave = await BackgroundGuardian.isPowerSaveMode();
+console.log('Power Save mode:', isPowerSave);
+
+// Check OEM manufacturer
+const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+console.log('Manufacturer:', manufacturer);
+```
+
+**Common causes:**
+- Power Save mode is enabled (affects all apps)
+- OEM-specific battery optimization not disabled
+- App Standby restrictions
+
+### Scenario 3: Screen wake lock not working
+
+**Symptoms:** Screen turns off despite calling `enableScreenWakeLock()`.
+
+**Debug steps:**
+
+```typescript
+// Verify screen wake lock is enabled
+const enabled = await BackgroundGuardian.enableScreenWakeLock();
+console.log('Screen wake lock enabled:', enabled);
+
+// Try re-enabling after navigation
+navigation.addListener('focus', async () => {
+  await BackgroundGuardian.enableScreenWakeLock();
+});
+```
+
+**Common causes:**
+- Screen wake lock only works when app is in foreground
+- Flag cleared when navigating between screens
+- Another component disabled the flag
+
+## Performance monitoring
+
+### Track wake lock duration
+
+```typescript
+let wakeLockStartTime: number | null = null;
+
+async function acquireWakeLockWithTracking(tag: string) {
+  wakeLockStartTime = Date.now();
+  const acquired = await BackgroundGuardian.acquireWakeLock(tag);
+  
+  if (acquired) {
+    console.log(`[${tag}] Wake lock acquired at ${new Date().toISOString()}`);
+  }
+  
+  return acquired;
+}
+
+async function releaseWakeLockWithTracking() {
+  const released = await BackgroundGuardian.releaseWakeLock();
+  
+  if (released && wakeLockStartTime) {
+    const duration = Date.now() - wakeLockStartTime;
+    console.log(`Wake lock held for ${duration}ms (${(duration / 1000 / 60).toFixed(1)} minutes)`);
+    wakeLockStartTime = null;
+  }
+  
+  return released;
+}
+```
+
+### Monitor battery impact
+
+```bash
+# Check battery stats for your app
+adb shell dumpsys batterystats --charged com.yourapp
+
+# Reset battery stats
+adb shell dumpsys batterystats --reset
+```
+
+<Warning>
+  Wake locks can significantly impact battery life. Always release them when background work is complete.
+</Warning>
+
+## Testing checklist
+
+Before releasing your app, verify:
+
+- [ ] Wake lock is acquired successfully
+- [ ] Wake lock is released when done
+- [ ] App survives Doze mode when exempt
+- [ ] Battery optimization exemption can be requested
+- [ ] OEM settings open on supported devices
+- [ ] Power Save mode is detected correctly
+- [ ] Screen wake lock works in foreground
+- [ ] Battery impact is acceptable
+- [ ] App handles AppState changes correctly
+- [ ] Status refreshes when returning to foreground

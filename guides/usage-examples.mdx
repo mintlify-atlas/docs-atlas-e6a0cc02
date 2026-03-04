@@ -1,0 +1,194 @@
+---
+title: Usage examples
+description: Real-world implementation patterns for React Native Background Guardian
+---
+
+## Background audio player
+
+Use wake locks to keep the CPU running while playing audio in the background. This prevents the system from suspending your app during playback.
+
+```typescript
+import BackgroundGuardian from "react-native-background-guardian";
+
+async function startAudioPlayback() {
+  // Acquire wake lock to prevent CPU sleep
+  await BackgroundGuardian.acquireWakeLock("AudioPlayer");
+
+  // Start audio playback
+  await audioPlayer.play();
+}
+
+async function stopAudioPlayback() {
+  // Stop audio playback
+  await audioPlayer.stop();
+
+  // Release wake lock
+  await BackgroundGuardian.releaseWakeLock();
+}
+```
+
+<Warning>
+  Always release the wake lock when you're done with background work. Failing to release wake locks will drain the device battery.
+</Warning>
+
+## Foreground kiosk / Always-on screen
+
+Keep the screen on while your app is in the foreground. Perfect for kiosk applications, digital signage, or dashboards.
+
+```typescript
+import BackgroundGuardian from "react-native-background-guardian";
+
+async function enterKioskMode() {
+  // Keep the screen on while the app is in the foreground
+  await BackgroundGuardian.enableScreenWakeLock();
+}
+
+async function exitKioskMode() {
+  await BackgroundGuardian.disableScreenWakeLock();
+}
+```
+
+<Note>
+  Screen wake locks only work while the app is in the foreground. For background CPU execution, use `acquireWakeLock()` instead.
+</Note>
+
+## Background location tracking
+
+For reliable background location tracking, you need to request battery optimization exemptions and handle OEM-specific settings.
+
+```typescript
+import BackgroundGuardian from "react-native-background-guardian";
+import { Alert } from "react-native";
+
+async function setupBackgroundTracking() {
+  // Check battery optimization status
+  const isIgnoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+
+  if (!isIgnoring) {
+    // Request exemption for reliable background execution
+    await BackgroundGuardian.requestBatteryOptimizationExemption();
+  }
+
+  // For aggressive OEMs, guide user to additional settings
+  const manufacturer = await BackgroundGuardian.getDeviceManufacturer();
+  if (["xiaomi", "huawei", "oppo", "vivo"].includes(manufacturer ?? "")) {
+    // Show instructions and open OEM settings
+    Alert.alert(
+      "Additional Setup Required",
+      'Please enable "Autostart" and disable battery optimization for this app.',
+      [{
+        text: "Open Settings",
+        onPress: () => BackgroundGuardian.openOEMSettings(),
+      }],
+    );
+  }
+}
+```
+
+<Warning>
+  OEM-specific battery optimizations can kill your app even if standard Android battery optimizations are disabled. Always check for manufacturer-specific settings on Xiaomi, Huawei, Oppo, Vivo, and Samsung devices.
+</Warning>
+
+## Complete integration example
+
+This example shows a complete React hook that manages battery optimization status and provides a clean interface for your components.
+
+```typescript
+import { useCallback, useEffect, useState } from "react";
+import { AppState } from "react-native";
+import BackgroundGuardian from "react-native-background-guardian";
+
+export function useBackgroundGuardian() {
+  const [isReady, setIsReady] = useState(false);
+  const [manufacturer, setManufacturer] = useState<string | null>(null);
+  const [isIgnoringBatteryOpt, setIsIgnoringBatteryOpt] = useState(false);
+
+  const refreshStatus = useCallback(async () => {
+    const ignoring = await BackgroundGuardian.isIgnoringBatteryOptimizations();
+    setIsIgnoringBatteryOpt(ignoring);
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      const mfr = await BackgroundGuardian.getDeviceManufacturer();
+      setManufacturer(mfr);
+      await refreshStatus();
+      setIsReady(true);
+    }
+    init();
+  }, [refreshStatus]);
+
+  // Refresh status when app comes to foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        refreshStatus();
+      }
+    });
+    return () => subscription.remove();
+  }, [refreshStatus]);
+
+  const requestExemption = useCallback(async () => {
+    await BackgroundGuardian.requestBatteryOptimizationExemption();
+    await refreshStatus();
+  }, [refreshStatus]);
+
+  return {
+    isReady,
+    manufacturer,
+    isIgnoringBatteryOpt,
+    requestExemption,
+    openOEMSettings: BackgroundGuardian.openOEMSettings,
+    acquireWakeLock: BackgroundGuardian.acquireWakeLock,
+    releaseWakeLock: BackgroundGuardian.releaseWakeLock,
+  };
+}
+```
+
+### Using the hook in your component
+
+```typescript
+import React from "react";
+import { View, Text, Button } from "react-native";
+import { useBackgroundGuardian } from "./useBackgroundGuardian";
+
+function BackgroundFeatureScreen() {
+  const {
+    isReady,
+    manufacturer,
+    isIgnoringBatteryOpt,
+    requestExemption,
+    openOEMSettings,
+  } = useBackgroundGuardian();
+
+  if (!isReady) {
+    return <Text>Loading...</Text>;
+  }
+
+  return (
+    <View>
+      <Text>Device: {manufacturer}</Text>
+      <Text>
+        Battery Optimization: {isIgnoringBatteryOpt ? "Exempt" : "Restricted"}
+      </Text>
+
+      {!isIgnoringBatteryOpt && (
+        <>
+          <Button
+            title="Request Battery Exemption"
+            onPress={requestExemption}
+          />
+          <Button
+            title="Open OEM Settings"
+            onPress={openOEMSettings}
+          />
+        </>
+      )}
+    </View>
+  );
+}
+```
+
+<Note>
+  The hook automatically refreshes battery optimization status when the app returns to the foreground, ensuring your UI always shows the current state.
+</Note>

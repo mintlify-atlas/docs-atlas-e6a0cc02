@@ -1,0 +1,111 @@
+---
+title: acquireWakeLock
+description: Acquire a partial wake lock to keep the CPU running
+---
+
+## Overview
+
+Acquires a partial wake lock to keep the CPU running while the screen is off. This prevents the Android system from suspending the CPU, allowing background tasks to continue running.
+
+```typescript
+function acquireWakeLock(
+  tag?: string,
+  timeout?: number
+): Promise<boolean>
+```
+
+## Parameters
+
+<ParamField path="tag" type="string" default="BackgroundGuardian">
+  Optional identifier for the wake lock. Useful for debugging and identifying which component holds the lock in system logs.
+</ParamField>
+
+<ParamField path="timeout" type="number" default="86400000">
+  Optional timeout in milliseconds after which the wake lock will be automatically released. Defaults to 24 hours (86400000ms).
+</ParamField>
+
+## Returns
+
+<ResponseField name="success" type="boolean">
+  Promise resolving to `true` if the wake lock was successfully acquired, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Acquires a `PARTIAL_WAKE_LOCK` that keeps the CPU running. Wake locks are reference-counted - you must call `releaseWakeLock()` for each `acquireWakeLock()` call. |
+| **iOS** | No-op that returns `true` immediately. iOS handles background execution differently through Background Modes. |
+
+## Important Notes
+
+- **Reference Counting**: Wake locks are reference-counted on Android. Always call [`releaseWakeLock()`](/api/release-wake-lock) when your background work is complete.
+- **Battery Impact**: Holding wake locks prevents the device from sleeping, which can drain battery. Use timeouts and release locks promptly.
+- **Permission Required**: Requires `android.permission.WAKE_LOCK` in AndroidManifest.xml (automatically added by the library).
+
+## Example Usage
+
+### Basic Usage
+
+```typescript
+import { acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+// Acquire wake lock before starting background work
+const acquired = await acquireWakeLock('MyBackgroundTask');
+
+if (acquired) {
+  // Perform background work
+  await doBackgroundWork();
+  
+  // Release when done
+  await releaseWakeLock();
+}
+```
+
+### With Custom Timeout
+
+```typescript
+// Acquire wake lock with 10-minute timeout
+const tenMinutes = 10 * 60 * 1000;
+const acquired = await acquireWakeLock('ShortTask', tenMinutes);
+
+if (acquired) {
+  await performShortBackgroundTask();
+  await releaseWakeLock();
+}
+```
+
+### With Error Handling
+
+```typescript
+try {
+  const acquired = await acquireWakeLock('DataSync');
+  
+  if (!acquired) {
+    console.error('Failed to acquire wake lock');
+    return;
+  }
+  
+  await syncData();
+} finally {
+  // Always release in finally block
+  await releaseWakeLock();
+}
+```
+
+### Checking Before Acquiring
+
+```typescript
+import { isWakeLockHeld, acquireWakeLock } from 'react-native-background-guardian';
+
+const isHeld = await isWakeLockHeld();
+if (!isHeld) {
+  await acquireWakeLock('MyTask');
+}
+```
+
+## Related APIs
+
+- [`releaseWakeLock()`](/api/release-wake-lock) - Release the wake lock
+- [`isWakeLockHeld()`](/api/is-wake-lock-held) - Check if wake lock is held
+- [`enableScreenWakeLock()`](/api/enable-screen-wake-lock) - Keep screen on (different from CPU wake lock)

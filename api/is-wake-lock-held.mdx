@@ -1,0 +1,180 @@
+---
+title: isWakeLockHeld
+description: Check if a wake lock is currently held
+---
+
+## Overview
+
+Checks if a wake lock is currently held by this module. Useful for debugging or updating UI state based on wake lock status.
+
+```typescript
+function isWakeLockHeld(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="isHeld" type="boolean">
+  Promise resolving to `true` if a wake lock is currently held, `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Returns whether a wake lock is actively held by this module. Checks the internal `WakeLock.isHeld` state. |
+| **iOS** | Always returns `false` as wake locks don't exist on iOS. |
+
+## Use Cases
+
+✅ **Good use cases**:
+- Checking if a wake lock is held before acquiring a new one
+- Updating UI to show active background tasks
+- Debugging wake lock state
+- Preventing duplicate wake lock acquisitions
+- Logging and analytics
+
+❌ **Not needed**:
+- Before calling `releaseWakeLock()` (it's safe to call even if not held)
+- For typical acquire/release patterns (just pair calls appropriately)
+
+## Example Usage
+
+### Check Before Acquiring
+
+```typescript
+import { isWakeLockHeld, acquireWakeLock } from 'react-native-background-guardian';
+
+const isHeld = await isWakeLockHeld();
+
+if (!isHeld) {
+  await acquireWakeLock('MyTask');
+  console.log('Wake lock acquired');
+} else {
+  console.log('Wake lock already held');
+}
+```
+
+### Update UI State
+
+```typescript
+import { useState, useEffect } from 'react';
+import { isWakeLockHeld, acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+function WakeLockIndicator() {
+  const [isActive, setIsActive] = useState(false);
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      const held = await isWakeLockHeld();
+      setIsActive(held);
+    };
+
+    // Check every 5 seconds
+    const interval = setInterval(checkStatus, 5000);
+    checkStatus();
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View>
+      <Text>Wake Lock: {isActive ? 'Active' : 'Inactive'}</Text>
+    </View>
+  );
+}
+```
+
+### Debugging Helper
+
+```typescript
+import { isWakeLockHeld } from 'react-native-background-guardian';
+
+async function debugWakeLockStatus() {
+  const isHeld = await isWakeLockHeld();
+  console.log('=== Wake Lock Status ===');
+  console.log('Held:', isHeld);
+  console.log('Timestamp:', new Date().toISOString());
+}
+
+// Call periodically or on specific events
+debugWakeLockStatus();
+```
+
+### Conditional Background Task
+
+```typescript
+import { isWakeLockHeld, acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+async function startBackgroundSync() {
+  const alreadyRunning = await isWakeLockHeld();
+  
+  if (alreadyRunning) {
+    console.log('Background sync already in progress');
+    return;
+  }
+
+  await acquireWakeLock('BackgroundSync');
+  
+  try {
+    await syncData();
+  } finally {
+    await releaseWakeLock();
+  }
+}
+```
+
+### Status Display Component
+
+```typescript
+import { View, Text, Button } from 'react-native';
+import { isWakeLockHeld, acquireWakeLock, releaseWakeLock } from 'react-native-background-guardian';
+
+function WakeLockControl() {
+  const [isHeld, setIsHeld] = useState(false);
+
+  const checkStatus = async () => {
+    const held = await isWakeLockHeld();
+    setIsHeld(held);
+  };
+
+  const handleAcquire = async () => {
+    await acquireWakeLock('UserTask');
+    await checkStatus();
+  };
+
+  const handleRelease = async () => {
+    await releaseWakeLock();
+    await checkStatus();
+  };
+
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  return (
+    <View>
+      <Text>Status: {isHeld ? '🟢 Held' : '⚪ Not Held'}</Text>
+      <Button title="Acquire" onPress={handleAcquire} />
+      <Button title="Release" onPress={handleRelease} />
+    </View>
+  );
+}
+```
+
+## Implementation Details
+
+### Android
+
+On Android, this method checks the `isHeld` property of the `PowerManager.WakeLock` instance. It returns `false` if:
+- No wake lock has been acquired
+- The wake lock was released
+- The wake lock timed out
+
+### iOS
+
+On iOS, this always returns `false` since the platform doesn't support wake locks in the same way. iOS apps should use Background Modes configured in Xcode for background execution.
+
+## Related APIs
+
+- [`acquireWakeLock()`](/api/acquire-wake-lock) - Acquire a wake lock
+- [`releaseWakeLock()`](/api/release-wake-lock) - Release the wake lock

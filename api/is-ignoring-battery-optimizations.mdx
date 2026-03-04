@@ -1,0 +1,197 @@
+---
+title: isIgnoringBatteryOptimizations
+description: Check if the app is exempt from battery optimizations
+---
+
+## Overview
+
+Checks if the app is currently exempt from battery optimizations. When an app is ignoring battery optimizations, it can run background tasks more freely without being restricted by Doze mode and App Standby.
+
+```typescript
+function isIgnoringBatteryOptimizations(): Promise<boolean>
+```
+
+## Returns
+
+<ResponseField name="isIgnoring" type="boolean">
+  Promise resolving to `true` if the app is ignoring battery optimizations (exempt from Doze restrictions), `false` otherwise.
+</ResponseField>
+
+## Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Android** | Checks if the app is whitelisted from Doze mode and App Standby using `PowerManager.isIgnoringBatteryOptimizations()`. Available on API 23+ (Android 6.0+). Returns `false` on older versions. |
+| **iOS** | Always returns `true` as the concept doesn't apply in the same way. iOS manages background execution through Background Modes. |
+
+## What Are Battery Optimizations?
+
+Battery optimizations were introduced in Android 6.0 (API 23) as part of **Doze mode**. When an app is NOT ignoring battery optimizations, the system may:
+
+- ❌ Defer background work and jobs
+- ❌ Restrict network access when idle
+- ❌ Delay alarms and timers
+- ❌ Stop location updates
+- ❌ Prevent wake locks from working
+
+When an app IS ignoring battery optimizations:
+
+- ✅ Background tasks run normally
+- ✅ Network access maintained
+- ✅ Wake locks function properly
+- ✅ Location updates continue
+
+## Example Usage
+
+### Check and Request Exemption
+
+```typescript
+import { isIgnoringBatteryOptimizations, requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+const isIgnoring = await isIgnoringBatteryOptimizations();
+
+if (!isIgnoring) {
+  // App is subject to battery optimizations
+  Alert.alert(
+    'Background Access',
+    'This app needs to run in the background. Please allow it to ignore battery optimizations.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Allow', 
+        onPress: async () => {
+          await requestBatteryOptimizationExemption();
+        }
+      }
+    ]
+  );
+}
+```
+
+### Startup Check
+
+```typescript
+import { useEffect } from 'react';
+import { isIgnoringBatteryOptimizations } from 'react-native-background-guardian';
+
+function App() {
+  useEffect(() => {
+    const checkStatus = async () => {
+      const isIgnoring = await isIgnoringBatteryOptimizations();
+      
+      if (isIgnoring) {
+        console.log('✅ App can run freely in background');
+      } else {
+        console.log('⚠️ App may be restricted in background');
+      }
+    };
+
+    checkStatus();
+  }, []);
+
+  return <AppContent />;
+}
+```
+
+### Status Display
+
+```typescript
+import { useState, useEffect } from 'react';
+import { isIgnoringBatteryOptimizations } from 'react-native-background-guardian';
+
+function BatteryOptimizationStatus() {
+  const [status, setStatus] = useState<'checking' | 'exempt' | 'restricted'>('checking');
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      const isIgnoring = await isIgnoringBatteryOptimizations();
+      setStatus(isIgnoring ? 'exempt' : 'restricted');
+    };
+
+    checkStatus();
+  }, []);
+
+  return (
+    <View>
+      <Text>Battery Optimization Status:</Text>
+      {status === 'checking' && <Text>Checking...</Text>}
+      {status === 'exempt' && <Text style={{ color: 'green' }}>✓ Exempt</Text>}
+      {status === 'restricted' && <Text style={{ color: 'orange' }}>⚠ Restricted</Text>}
+    </View>
+  );
+}
+```
+
+### Before Starting Background Service
+
+```typescript
+import { isIgnoringBatteryOptimizations, requestBatteryOptimizationExemption } from 'react-native-background-guardian';
+
+async function startBackgroundService() {
+  const isIgnoring = await isIgnoringBatteryOptimizations();
+  
+  if (!isIgnoring) {
+    const proceed = await showConfirmDialog(
+      'Background service may be restricted. Request exemption?'
+    );
+    
+    if (proceed) {
+      await requestBatteryOptimizationExemption();
+    } else {
+      console.warn('Starting service without battery optimization exemption');
+    }
+  }
+  
+  // Start the service
+  await initializeBackgroundService();
+}
+```
+
+### Settings Screen
+
+```typescript
+import { isIgnoringBatteryOptimizations, openBatteryOptimizationSettings } from 'react-native-background-guardian';
+
+function SettingsScreen() {
+  const [isIgnoring, setIsIgnoring] = useState(false);
+
+  const checkStatus = async () => {
+    const status = await isIgnoringBatteryOptimizations();
+    setIsIgnoring(status);
+  };
+
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  return (
+    <View>
+      <Text>Battery Optimization: {isIgnoring ? 'Disabled' : 'Enabled'}</Text>
+      <Button 
+        title="Open Settings" 
+        onPress={() => openBatteryOptimizationSettings()}
+      />
+    </View>
+  );
+}
+```
+
+## Difference from Power Save Mode
+
+`isIgnoringBatteryOptimizations()` is different from [`isPowerSaveMode()`](/api/is-power-save-mode):
+
+| Feature | Battery Optimizations | Power Save Mode |
+|---------|----------------------|------------------|
+| **Scope** | Per-app setting | System-wide setting |
+| **Control** | User grants to specific apps | User enables globally |
+| **When active** | Always (unless exempt) | Only when Battery Saver on |
+| **Can be bypassed** | Yes (with exemption) | Affects all apps |
+
+An app can be exempt from battery optimizations but still be affected when the user enables Power Save mode.
+
+## Related APIs
+
+- [`requestBatteryOptimizationExemption()`](/api/request-battery-optimization-exemption) - Request exemption
+- [`openBatteryOptimizationSettings()`](/api/open-battery-optimization-settings) - Open settings
+- [`isPowerSaveMode()`](/api/is-power-save-mode) - Check Battery Saver status
+- [`isDeviceIdleMode()`](/api/is-device-idle-mode) - Check Doze mode status
