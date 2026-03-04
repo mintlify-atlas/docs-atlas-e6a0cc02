@@ -1,0 +1,125 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "React Native Background Guardian",
+  "projectDescription": "Cross-platform React Native library that prevents Android from killing background processes through Wake Locks, battery optimization exemptions, and OEM-specific protections.",
+  "theme": "aspen",
+  "primaryColor": "#cb0404",
+  "lightColor": "#f3d2d2",
+  "darkColor": "#e37b84",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/doze-and-app-standby",
+              "concepts/battery-optimization",
+              "concepts/oem-restrictions",
+              "concepts/wake-locks"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/usage-examples",
+              "guides/platform-differences",
+              "guides/testing-and-debugging",
+              "guides/troubleshooting"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/oem-compatibility",
+              "resources/faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Wake Lock",
+            "pages": [
+              "api/acquire-wake-lock",
+              "api/release-wake-lock",
+              "api/is-wake-lock-held",
+              "api/enable-screen-wake-lock",
+              "api/disable-screen-wake-lock"
+            ]
+          },
+          {
+            "group": "Battery Optimization",
+            "pages": [
+              "api/is-ignoring-battery-optimizations",
+              "api/request-battery-optimization-exemption",
+              "api/open-battery-optimization-settings",
+              "api/is-device-idle-mode"
+            ]
+          },
+          {
+            "group": "Power Save Mode",
+            "pages": [
+              "api/is-power-save-mode",
+              "api/open-power-save-mode-settings"
+            ]
+          },
+          {
+            "group": "OEM Settings",
+            "pages": [
+              "api/open-oem-settings"
+            ]
+          },
+          {
+            "group": "Device Info",
+            "pages": [
+              "api/get-device-manufacturer"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Wake Lock Management - Keep CPU running during background tasks",
+    "Screen Wake Lock - Keep screen on in foreground",
+    "Battery Optimization Exemption - Request Doze mode whitelist",
+    "Power Save Mode Detection - Detect and manage Battery Saver mode",
+    "OEM-Specific Settings - Navigate to manufacturer battery settings",
+    "Cross-Platform Support - iOS-safe with no-op implementation",
+    "TypeScript Support - Full type definitions included",
+    "New Architecture Ready - Built as a Turbo Module"
+  ],
+  "publicApiSurface": [
+    "acquireWakeLock(tag?, timeout?)",
+    "releaseWakeLock()",
+    "isWakeLockHeld()",
+    "enableScreenWakeLock()",
+    "disableScreenWakeLock()",
+    "isIgnoringBatteryOptimizations()",
+    "requestBatteryOptimizationExemption()",
+    "openBatteryOptimizationSettings()",
+    "isDeviceIdleMode()",
+    "isPowerSaveMode()",
+    "openPowerSaveModeSettings()",
+    "openOEMSettings()",
+    "getDeviceManufacturer()"
+  ]
+}
